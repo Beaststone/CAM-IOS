@@ -1,40 +1,71 @@
 import SwiftUI
 import AVFoundation
 
+
 struct CameraPreviewRepresentable: UIViewRepresentable {
     var session: AVCaptureSession
 
-    // Wir erstellen eine kleine Hilfsklasse, die das Resize automatisch handelt
+    // 1. Die interne Hilfsklasse für das Layout-Management
     class CameraView: UIView {
         var previewLayer: AVCaptureVideoPreviewLayer?
 
+        // Diese Methode wird vom System aufgerufen, sobald das Handy gedreht wird
         override func layoutSubviews() {
             super.layoutSubviews()
-            // Hier passiert die Magie: Das Layer wird bei jeder Drehung/Änderung
-            // exakt auf die aktuellen Grenzen der View gesetzt.
-            previewLayer?.frame = self.bounds
+            
+            guard let layer = previewLayer else { return }
+            
+            // Frame an die neue Größe anpassen
+            layer.frame = self.bounds
+            
+            // Die interne Video-Ausrichtung korrigieren
+            if let connection = layer.connection, connection.isVideoOrientationSupported {
+                let scenes = UIApplication.shared.connectedScenes
+                let windowScene = scenes.first as? UIWindowScene
+                let orientation = windowScene?.interfaceOrientation ?? .portrait
+                
+                // Mapping von UI-Orientierung zu Video-Orientierung
+                switch orientation {
+                case .portrait:
+                    connection.videoOrientation = .portrait
+                case .landscapeLeft:
+                    connection.videoOrientation = .landscapeLeft
+                case .landscapeRight:
+                    connection.videoOrientation = .landscapeRight
+                case .portraitUpsideDown:
+                    connection.videoOrientation = .portraitUpsideDown
+                @unknown default:
+                    connection.videoOrientation = .portrait
+                }
+            }
         }
     }
 
+    // 2. Erstellung der View
     func makeUIView(context: Context) -> UIView {
-        let view = CameraView() // Unsere Hilfsklasse nutzen
+        let view = CameraView()
         view.backgroundColor = .black
 
         let previewLayer = AVCaptureVideoPreviewLayer(session: session)
+        
+        // .resizeAspectFill sorgt für echtes Vollbild (streckt/füllt alles aus)
         previewLayer.videoGravity = .resizeAspectFill
+        
         view.layer.addSublayer(previewLayer)
         view.previewLayer = previewLayer
 
         return view
     }
 
+    // 3. Update-Zyklus von SwiftUI
     func updateUIView(_ uiView: UIView, context: Context) {
-        if let previewLayer = uiView.layer.sublayers?.first as? AVCaptureVideoPreviewLayer {
-            // Frame nochmal explizit setzen (sicher ist sicher)
-            previewLayer.frame = uiView.bounds
-            updateOrientation(previewLayer)
+        // Hier stellen wir sicher, dass bei jeder Änderung das Layout neu berechnet wird
+        DispatchQueue.main.async {
+            uiView.setNeedsLayout()
+            uiView.layoutIfNeeded()
         }
     }
+}
 
     private func updateOrientation(_ layer: AVCaptureVideoPreviewLayer) {
         // Holen der aktuellen Fenster-Szene für die Orientierung
