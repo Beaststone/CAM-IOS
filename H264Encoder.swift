@@ -126,7 +126,7 @@ private func compressionOutputCallback(outputCallbackRefCon: UnsafeMutableRawPoi
           CMSampleBufferDataIsReady(sampleBuffer),
           let attachmentsArray = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false) as? [[CFString: Any]],
           let attachment = attachmentsArray.first else {
-        print("[H264Encoder] Callback error: status=\(status), ready=\(sampleBuffer?.debugDescription ?? "nil")")
+        print("[H264Encoder] Callback error: status=\(status), sampleBuffer=\(sampleBuffer != nil ? "ready" : "nil")")
         return
     }
 
