@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @EnvironmentObject var appState: AppState
+    @StateObject private var appState = AppState()
     @StateObject private var controller = StreamController()
 
     var body: some View {
