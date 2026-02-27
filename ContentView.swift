@@ -112,7 +112,7 @@ struct ContentView: View {
                     }
                     Spacer()
                 }
-            }
+            } else {
                 // OVERLAY mit Status & Button wenn NICHT verbunden - ZENTRIERT
                 VStack(spacing: 0) {
                     Spacer()
