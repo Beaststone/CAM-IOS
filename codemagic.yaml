@@ -4,26 +4,26 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 10
     scripts:
-      - name: Compile App Binary
+      - name: Force Compile
         script: |
-          # Wir kompilieren ALLE Swift-Dateien zu einer echten ausführbaren Datei
+          # 1. Programmcode zusammenbauen
           xcrun -sdk iphoneos swiftc \
             -target arm64-apple-ios15.0 \
             -o IriunClone \
             *.swift
           
-          # Wir bauen die Struktur für Sideloadly
+          # 2. Struktur aufbauen
           mkdir -p Payload/IriunClone.app
-          mv IriunClone Payload/IriunClone.app/
+          cp IriunClone Payload/IriunClone.app/
           
-          # Wir stellen sicher, dass die Info.plist richtig geschrieben wird
-          if [ -f "info.plist" ]; then
-            cp info.plist Payload/IriunClone.app/Info.plist
-          elif [ -f "Info.plist" ]; then
-            cp Info.plist Payload/IriunClone.app/Info.plist
-          fi
+          # 3. Info.plist sicherstellen
+          find . -maxdepth 1 -iname "info.plist" -exec cp {} Payload/IriunClone.app/Info.plist \;
           
-          # Verpacken als IPA
+          # 4. Hilfsdateien für das System erstellen
+          echo "APPL????" > Payload/IriunClone.app/PkgInfo
+          chmod +x Payload/IriunClone.app/IriunClone
+          
+          # 5. Verpacken
           zip -r IriunClone.ipa Payload
     artifacts:
       - "*.ipa"
