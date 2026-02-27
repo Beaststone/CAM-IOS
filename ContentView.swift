@@ -5,24 +5,44 @@ struct CameraPreviewRepresentable: UIViewRepresentable {
     var session: AVCaptureSession
 
     func makeUIView(context: Context) -> UIView {
-        let view = UIView(frame: UIScreen.main.bounds)
+        let view = UIView()
         view.backgroundColor = .black
 
         let previewLayer = AVCaptureVideoPreviewLayer(session: session)
         previewLayer.videoGravity = .resizeAspectFill
-        previewLayer.frame = view.layer.bounds
         previewLayer.connection?.videoOrientation = .portrait
         view.layer.addSublayer(previewLayer)
 
-        print("[CameraPreviewRepresentable] Layer added, session running: \(session.isRunning)")
+        // Wichtig: Frame nach dem hinzufügen setzen!
+        DispatchQueue.main.async {
+            previewLayer.frame = view.bounds
+            print("[CameraPreviewRepresentable] Layer frame set to: \(view.bounds)")
+            print("[CameraPreviewRepresentable] Session isRunning: \(session.isRunning)")
+        }
 
         return view
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {
         if let previewLayer = uiView.layer.sublayers?.first as? AVCaptureVideoPreviewLayer {
-            previewLayer.frame = uiView.layer.bounds
-            previewLayer.connection?.videoOrientation = .portrait
+            previewLayer.frame = uiView.bounds
+            previewLayer.connection?.videoOrientation = UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .first?
+                .interfaceOrientation
+                .videoOrientation ?? .portrait
+        }
+    }
+}
+
+extension UIInterfaceOrientation {
+    var videoOrientation: AVCaptureVideoOrientation {
+        switch self {
+        case .portrait: return .portrait
+        case .landscapeRight: return .landscapeRight
+        case .landscapeLeft: return .landscapeLeft
+        case .portraitUpsideDown: return .portraitUpsideDown
+        @unknown default: return .portrait
         }
     }
 }
@@ -34,10 +54,28 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            // KAMERA IMMER ANZEIGEN (egal ob connected oder nicht)
+            // KAMERA IMMER ANZEIGEN (egal ob connected oder nicht) - FULLSCREEN
             if let controller = controller {
                 CameraPreviewRepresentable(session: controller.cameraManager.session)
                     .ignoresSafeArea()
+                    .edgesIgnoringSafeArea(.all)
+            }
+
+            // OVERLAY: Kamera-Wechsel Button IMMER oben links
+            VStack {
+                HStack {
+                    Button(action: { switchCamera() }) {
+                        Image(systemName: "camera.rotate.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(.white)
+                            .padding(10)
+                            .background(Color.black.opacity(0.5))
+                            .clipShape(Circle())
+                    }
+                    .padding()
+                    Spacer()
+                }
+                Spacer()
             }
 
             // VOLLBILD wenn verbunden - nur X-Button
@@ -58,22 +96,8 @@ struct ContentView: View {
                     Spacer()
                 }
             } else {
-                // OVERLAY mit Status & Button wenn NICHT verbunden
+                // OVERLAY mit Status & Button wenn NICHT verbunden - ZENTRIERT
                 VStack(spacing: 0) {
-                    // Kamera-Wechsel Button oben links
-                    HStack {
-                        Button(action: { switchCamera() }) {
-                            Image(systemName: "camera.rotate.fill")
-                                .font(.system(size: 20))
-                                .foregroundColor(.white)
-                                .padding()
-                                .background(Color.black.opacity(0.4))
-                                .clipShape(Circle())
-                        }
-                        .padding()
-                        Spacer()
-                    }
-
                     Spacer()
 
                     VStack(spacing: 12) {
@@ -119,6 +143,8 @@ struct ContentView: View {
                     }
                     .padding()
                     .background(Color.black.opacity(0.5))
+
+                    Spacer()
                 }
             }
         }
@@ -133,9 +159,10 @@ struct ContentView: View {
                     guard let newController = newController else { return }
                     if granted {
                         DispatchQueue.main.async {
+                            print("[ContentView] Camera access granted, configuring...")
                             newController.cameraManager.reconfigure()
                             newController.cameraManager.start()
-                            print("[ContentView] Camera started successfully")
+                            print("[ContentView] Camera started")
                         }
                     } else {
                         print("[ContentView] Camera access denied")
