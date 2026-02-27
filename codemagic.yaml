@@ -1,0 +1,31 @@
+# Codemagic Konfiguration für IriunClone iOS
+workflows:
+  ios-workflow:
+    name: iOS Build Workflow
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+    environment:
+      groups:
+        - app_credentials
+      vars:
+        XCODE_PROJECT: "IriunClone.xcodeproj" # Falls du keinen .xcodeproj Ordner hast, findet Codemagic das meist selbst
+        XCODE_SCHEME: "IriunClone"
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Initialize project
+        script: | 
+          # Dieser Schritt stellt sicher, dass alle Swift-Dateien gefunden werden
+          find . -name "*.swift"
+      - name: Build iOS App (IPA)
+        script: | 
+          # Baut die App ohne einen Mac-Account zu benötigen (für AltStore)
+          xcode-project build-ipa \
+            --project "$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      email:
+        recipients:
+          - can.inneci2001@gmail.com # Hier deine E-Mail eintragen
