@@ -5,10 +5,20 @@ workflows:
     environment:
       xcode: latest
     scripts:
-      - name: Build IPA
+      - name: Build App Binary
         script: |
-          xcode-project build-ipa \
-            --project IriunClone.xcodeproj \
-            --scheme IriunClone
+          # Wir bauen nur die .app Datei, das reicht für Sideloadly
+          xcodebuild build \
+            -project IriunClone.xcodeproj \
+            -scheme IriunClone \
+            -configuration Debug \
+            -sdk iphoneos \
+            -derivedDataPath build
+      - name: Package IPA
+        script: |
+          # Wir packen die App manuell in das richtige Format
+          mkdir -p Payload
+          cp -r build/Build/Products/Debug-iphoneos/IriunClone.app Payload/
+          zip -r IriunClone.ipa Payload
     artifacts:
-      - build/ios/ipa/*.ipa
+      - "*.ipa"
