@@ -4,52 +4,60 @@ import AVFoundation
 struct CameraPreviewRepresentable: UIViewRepresentable {
     var session: AVCaptureSession
 
+    // Wir erstellen eine kleine Hilfsklasse, die das Resize automatisch handelt
+    class CameraView: UIView {
+        var previewLayer: AVCaptureVideoPreviewLayer?
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            // Hier passiert die Magie: Das Layer wird bei jeder Drehung/Änderung
+            // exakt auf die aktuellen Grenzen der View gesetzt.
+            previewLayer?.frame = self.bounds
+        }
+    }
+
     func makeUIView(context: Context) -> UIView {
-        let view = UIView()
+        let view = CameraView() // Unsere Hilfsklasse nutzen
         view.backgroundColor = .black
 
         let previewLayer = AVCaptureVideoPreviewLayer(session: session)
         previewLayer.videoGravity = .resizeAspectFill
         view.layer.addSublayer(previewLayer)
-
-        // Frame MUSS asynchron gesetzt werden!
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            previewLayer.frame = view.bounds
-            print("[CameraPreviewRepresentable] Frame set to: \(view.bounds)")
-            print("[CameraPreviewRepresentable] Session running: \(session.isRunning)")
-        }
+        view.previewLayer = previewLayer
 
         return view
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {
         if let previewLayer = uiView.layer.sublayers?.first as? AVCaptureVideoPreviewLayer {
+            // Frame nochmal explizit setzen (sicher ist sicher)
             previewLayer.frame = uiView.bounds
             updateOrientation(previewLayer)
         }
     }
 
     private func updateOrientation(_ layer: AVCaptureVideoPreviewLayer) {
-        let orientation = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first?
-            .interfaceOrientation ?? .portrait
+        // Holen der aktuellen Fenster-Szene für die Orientierung
+        let scenes = UIApplication.shared.connectedScenes
+        let windowScene = scenes.first as? UIWindowScene
+        let orientation = windowScene?.interfaceOrientation ?? .portrait
 
-        switch orientation {
-        case .portrait:
-            layer.connection?.videoOrientation = .portrait
-        case .portraitUpsideDown:
-            layer.connection?.videoOrientation = .portraitUpsideDown
-        case .landscapeLeft:
-            layer.connection?.videoOrientation = .landscapeLeft
-        case .landscapeRight:
-            layer.connection?.videoOrientation = .landscapeRight
-        @unknown default:
-            layer.connection?.videoOrientation = .portrait
+        if let connection = layer.connection, connection.isVideoOrientationSupported {
+            switch orientation {
+            case .portrait:
+                connection.videoOrientation = .portrait
+            case .landscapeLeft:
+                connection.videoOrientation = .landscapeLeft
+            case .landscapeRight:
+                connection.videoOrientation = .landscapeRight
+            case .portraitUpsideDown:
+                connection.videoOrientation = .portraitUpsideDown
+            @unknown default:
+                connection.videoOrientation = .portrait
+            }
         }
     }
 }
-
 extension UIInterfaceOrientation {
     var videoOrientation: AVCaptureVideoOrientation {
         switch self {
