@@ -1,58 +1,6 @@
 import SwiftUI
 import AVFoundation
 
-struct CameraPreviewRepresentable: UIViewRepresentable {
-    var session: AVCaptureSession
-
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
-        view.backgroundColor = .black
-
-        let previewLayer = AVCaptureVideoPreviewLayer(session: session)
-        previewLayer.videoGravity = .resizeAspectFill
-        previewLayer.frame = CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
-        view.layer.addSublayer(previewLayer)
-
-        return view
-    }
-
-    func updateUIView(_ uiView: UIView, context: Context) {
-        if let previewLayer = uiView.layer.sublayers?.first as? AVCaptureVideoPreviewLayer {
-            previewLayer.frame = uiView.bounds
-
-            let orientation = UIApplication.shared.connectedScenes
-                .compactMap { $0 as? UIWindowScene }
-                .first?
-                .interfaceOrientation ?? .portrait
-
-            switch orientation {
-            case .portrait:
-                previewLayer.connection?.videoOrientation = .portrait
-            case .portraitUpsideDown:
-                previewLayer.connection?.videoOrientation = .portraitUpsideDown
-            case .landscapeLeft:
-                previewLayer.connection?.videoOrientation = .landscapeLeft
-            case .landscapeRight:
-                previewLayer.connection?.videoOrientation = .landscapeRight
-            @unknown default:
-                previewLayer.connection?.videoOrientation = .portrait
-            }
-        }
-    }
-}
-
-extension UIInterfaceOrientation {
-    var videoOrientation: AVCaptureVideoOrientation {
-        switch self {
-        case .portrait: return .portrait
-        case .landscapeRight: return .landscapeRight
-        case .landscapeLeft: return .landscapeLeft
-        case .portraitUpsideDown: return .portraitUpsideDown
-        @unknown default: return .portrait
-        }
-    }
-}
-
 struct ContentView: View {
     @StateObject private var appState = AppState()
     @State private var controller: StreamController?
