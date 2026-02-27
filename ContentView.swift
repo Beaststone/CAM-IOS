@@ -10,45 +10,34 @@ struct CameraPreviewRepresentable: UIViewRepresentable {
 
         let previewLayer = AVCaptureVideoPreviewLayer(session: session)
         previewLayer.videoGravity = .resizeAspectFill
-        previewLayer.connection?.videoOrientation = .portrait
+        previewLayer.frame = CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
         view.layer.addSublayer(previewLayer)
-
-        // Store in context für später
-        context.coordinator.previewLayer = previewLayer
 
         return view
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {
-        guard let previewLayer = context.coordinator.previewLayer else { return }
+        if let previewLayer = uiView.layer.sublayers?.first as? AVCaptureVideoPreviewLayer {
+            previewLayer.frame = uiView.bounds
 
-        // Frame IMMER auf die aktuelle View-Größe setzen
-        previewLayer.frame = uiView.bounds
+            let orientation = UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .first?
+                .interfaceOrientation ?? .portrait
 
-        // Orientation updaten
-        let orientation = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first?
-            .interfaceOrientation ?? .portrait
-
-        switch orientation {
-        case .portrait, .portraitUpsideDown:
-            previewLayer.connection?.videoOrientation = orientation == .portrait ? .portrait : .portraitUpsideDown
-        case .landscapeLeft:
-            previewLayer.connection?.videoOrientation = .landscapeLeft
-        case .landscapeRight:
-            previewLayer.connection?.videoOrientation = .landscapeRight
-        @unknown default:
-            previewLayer.connection?.videoOrientation = .portrait
+            switch orientation {
+            case .portrait:
+                previewLayer.connection?.videoOrientation = .portrait
+            case .portraitUpsideDown:
+                previewLayer.connection?.videoOrientation = .portraitUpsideDown
+            case .landscapeLeft:
+                previewLayer.connection?.videoOrientation = .landscapeLeft
+            case .landscapeRight:
+                previewLayer.connection?.videoOrientation = .landscapeRight
+            @unknown default:
+                previewLayer.connection?.videoOrientation = .portrait
+            }
         }
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    class Coordinator {
-        var previewLayer: AVCaptureVideoPreviewLayer?
     }
 }
 
