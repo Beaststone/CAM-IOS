@@ -10,27 +10,42 @@ struct CameraPreviewRepresentable: UIViewRepresentable {
 
         let previewLayer = AVCaptureVideoPreviewLayer(session: session)
         previewLayer.videoGravity = .resizeAspectFill
-        previewLayer.connection?.videoOrientation = .portrait
         view.layer.addSublayer(previewLayer)
 
-        // Wichtig: Frame nach dem hinzufügen setzen!
-        DispatchQueue.main.async {
-            previewLayer.frame = view.bounds
-            print("[CameraPreviewRepresentable] Layer frame set to: \(view.bounds)")
-            print("[CameraPreviewRepresentable] Session isRunning: \(session.isRunning)")
-        }
+        // Frame sofort setzen
+        previewLayer.frame = view.bounds
+        updateOrientation(previewLayer)
+
+        print("[CameraPreviewRepresentable] Layer added")
 
         return view
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {
         if let previewLayer = uiView.layer.sublayers?.first as? AVCaptureVideoPreviewLayer {
+            // Frame IMMER updaten - wichtig für Rotation!
             previewLayer.frame = uiView.bounds
-            previewLayer.connection?.videoOrientation = UIApplication.shared.connectedScenes
-                .compactMap { $0 as? UIWindowScene }
-                .first?
-                .interfaceOrientation
-                .videoOrientation ?? .portrait
+            updateOrientation(previewLayer)
+        }
+    }
+
+    private func updateOrientation(_ layer: AVCaptureVideoPreviewLayer) {
+        let orientation = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first?
+            .interfaceOrientation ?? .portrait
+
+        switch orientation {
+        case .portrait:
+            layer.connection?.videoOrientation = .portrait
+        case .portraitUpsideDown:
+            layer.connection?.videoOrientation = .portraitUpsideDown
+        case .landscapeLeft:
+            layer.connection?.videoOrientation = .landscapeLeft
+        case .landscapeRight:
+            layer.connection?.videoOrientation = .landscapeRight
+        @unknown default:
+            layer.connection?.videoOrientation = .portrait
         }
     }
 }
@@ -62,8 +77,8 @@ struct ContentView: View {
             }
 
             // OVERLAY: Kamera-Wechsel Button IMMER oben links
-            VStack {
-                HStack {
+            VStack(spacing: 0) {
+                HStack(spacing: 0) {
                     Button(action: { switchCamera() }) {
                         Image(systemName: "camera.rotate.fill")
                             .font(.system(size: 20))
@@ -72,7 +87,8 @@ struct ContentView: View {
                             .background(Color.black.opacity(0.5))
                             .clipShape(Circle())
                     }
-                    .padding()
+                    .padding(.top, 8)
+                    .padding(.leading, 16)
                     Spacer()
                 }
                 Spacer()
@@ -80,22 +96,23 @@ struct ContentView: View {
 
             // VOLLBILD wenn verbunden - nur X-Button
             if appState.connectionState == .connected {
-                VStack {
-                    HStack {
+                VStack(spacing: 0) {
+                    HStack(spacing: 0) {
                         Spacer()
                         Button(action: { disconnectStreaming() }) {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.system(size: 28))
                                 .foregroundColor(.white)
-                                .padding()
+                                .padding(10)
                                 .background(Color.black.opacity(0.4))
                                 .clipShape(Circle())
                         }
-                        .padding()
+                        .padding(.top, 8)
+                        .padding(.trailing, 16)
                     }
                     Spacer()
                 }
-            } else {
+            }
                 // OVERLAY mit Status & Button wenn NICHT verbunden - ZENTRIERT
                 VStack(spacing: 0) {
                     Spacer()
