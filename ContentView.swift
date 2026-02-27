@@ -10,7 +10,6 @@ struct CameraPreviewRepresentable: UIViewRepresentable {
 
         let previewLayer = AVCaptureVideoPreviewLayer(session: session)
         previewLayer.videoGravity = .resizeAspectFill
-        previewLayer.frame = view.bounds
         view.layer.addSublayer(previewLayer)
 
         return view
@@ -67,6 +66,7 @@ struct ContentView: View {
             if let controller = controller {
                 CameraPreviewRepresentable(session: controller.cameraManager.session)
                     .ignoresSafeArea()
+                    .edgesIgnoringSafeArea(.all)
             }
 
             // TOP BUTTONS OVERLAY
