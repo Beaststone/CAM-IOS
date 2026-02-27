@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var appState = AppState()
-    @StateObject private var controller = StreamController()
+    @State private var controller: StreamController?
     @State private var isStreaming = false
 
     var body: some View {
@@ -29,10 +29,14 @@ struct ContentView: View {
 
                 Button(isStreaming ? "Stop" : "Start") {
                     if isStreaming {
-                        controller.stop()
+                        controller?.stop()
+                        controller = nil
                         isStreaming = false
                     } else {
-                        controller.start()
+                        let newController = StreamController()
+                        newController.attach(appState: appState)
+                        newController.start()
+                        controller = newController
                         isStreaming = true
                     }
                 }
@@ -43,15 +47,14 @@ struct ContentView: View {
 
             if appState.isScreenDimmed {
                 BlackScreenOverlayView {
-                    controller.resetDimTimer()
+                    controller?.resetDimTimer()
                 }
             }
         }
-        .onAppear {
-            controller.attach(appState: appState)
-        }
         .onDisappear {
-            controller.stop()
+            controller?.stop()
+            controller = nil
+            isStreaming = false
         }
     }
 
