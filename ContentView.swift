@@ -12,18 +12,18 @@ struct CameraPreviewRepresentable: UIViewRepresentable {
         previewLayer.videoGravity = .resizeAspectFill
         view.layer.addSublayer(previewLayer)
 
-        // Frame sofort setzen
-        previewLayer.frame = view.bounds
-        updateOrientation(previewLayer)
-
-        print("[CameraPreviewRepresentable] Layer added")
+        // Frame MUSS asynchron gesetzt werden!
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            previewLayer.frame = view.bounds
+            print("[CameraPreviewRepresentable] Frame set to: \(view.bounds)")
+            print("[CameraPreviewRepresentable] Session running: \(session.isRunning)")
+        }
 
         return view
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {
         if let previewLayer = uiView.layer.sublayers?.first as? AVCaptureVideoPreviewLayer {
-            // Frame IMMER updaten - wichtig für Rotation!
             previewLayer.frame = uiView.bounds
             updateOrientation(previewLayer)
         }
