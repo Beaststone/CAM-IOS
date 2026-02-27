@@ -66,27 +66,6 @@ struct CameraPreviewRepresentable: UIViewRepresentable {
     }
 }
 
-    private func updateOrientation(_ layer: AVCaptureVideoPreviewLayer) {
-        let orientation = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first?
-            .interfaceOrientation ?? .portrait
-
-        switch orientation {
-        case .portrait:
-            layer.connection?.videoOrientation = .portrait
-        case .portraitUpsideDown:
-            layer.connection?.videoOrientation = .portraitUpsideDown
-        case .landscapeLeft:
-            layer.connection?.videoOrientation = .landscapeLeft
-        case .landscapeRight:
-            layer.connection?.videoOrientation = .landscapeRight
-        @unknown default:
-            layer.connection?.videoOrientation = .portrait
-        }
-    }
-}
-
 extension UIInterfaceOrientation {
     var videoOrientation: AVCaptureVideoOrientation {
         switch self {
