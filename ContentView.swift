@@ -7,95 +7,90 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            VStack(spacing: 12) {
-                VStack(spacing: 8) {
-                    Text(titleText)
-                        .font(.title2)
-                        .fontWeight(.semibold)
+            // VOLLBILD KAMERA wenn verbunden
+            if let controller = controller, appState.connectionState == .connected {
+                CameraPreviewRepresentable(session: controller.cameraManager.session)
+                    .ignoresSafeArea()
 
-                    Text(subtitleText)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                }
-                .padding(.top, 16)
-
-                // Kamera-Vorschau Platzhalter
-                ZStack {
-                    Color.black.opacity(0.8)
-                    VStack(spacing: 12) {
-                        Image(systemName: "camera.fill")
-                            .font(.system(size: 50))
-                            .foregroundColor(.white.opacity(0.5))
-                        Text("Drücke 'Start' um Vorschau zu sehen")
-                            .font(.subheadline)
-                            .foregroundColor(.white.opacity(0.5))
-                    }
-                }
-                .aspectRatio(4.0/3.0, contentMode: .fit)
-                .cornerRadius(12)
-                .padding()
-
-                VStack(spacing: 8) {
-                    Button(action: toggleStreaming) {
-                        HStack {
-                            Image(systemName: isStreaming ? "stop.circle.fill" : "play.circle.fill")
-                            Text(isStreaming ? "Stop Streaming" : "Start Streaming")
+                // Nur X-Button oben rechts
+                VStack {
+                    HStack {
+                        Spacer()
+                        Button(action: { disconnectStreaming() }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 28))
+                                .foregroundColor(.white)
+                                .padding()
+                                .background(Color.black.opacity(0.4))
+                                .clipShape(Circle())
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(12)
-                        .background(isStreaming ? Color.red : Color.green)
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
+                        .padding()
                     }
-                    .disabled(appState.connectionState == .searching)
+                    Spacer()
+                }
+            } else {
+                // STATUS-SCREEN wenn NICHT verbunden
+                VStack(spacing: 20) {
+                    Spacer()
 
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(statusColor)
-                            .frame(width: 10, height: 10)
+                    VStack(spacing: 8) {
+                        Text(titleText)
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                        Text(subtitleText)
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding()
 
-                        if let pcName = appState.pcName {
-                            Text("PC: \(pcName)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        } else {
+                    VStack(spacing: 8) {
+                        Button(action: startStreaming) {
+                            HStack {
+                                Image(systemName: "play.circle.fill")
+                                Text("Start Streaming")
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(12)
+                            .background(Color.green)
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
+                        }
+                        .disabled(appState.connectionState == .searching)
+
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(statusColor)
+                                .frame(width: 10, height: 10)
                             Text(statusMessage)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
+                            Spacer()
                         }
-
-                        Spacer()
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(6)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(6)
-                }
-                .padding(.horizontal)
+                    .padding()
 
-                Spacer()
-            }
-
-            if appState.isScreenDimmed {
-                BlackScreenOverlayView {
-                    controller?.resetDimTimer()
+                    Spacer()
                 }
             }
         }
-        .onDisappear {
-            controller?.stop()
-            controller = nil
-            isStreaming = false
+        .onAppear {
+            if controller == nil {
+                let newController = StreamController()
+                newController.attach(appState: appState)
+                self.controller = newController
+            }
         }
     }
 
-    private func toggleStreaming() {
-        if isStreaming {
-            controller?.stop()
-            controller = nil
-            isStreaming = false
+    private func startStreaming() {
+        if let existingController = controller {
+            existingController.start()
+            isStreaming = true
         } else {
             let newController = StreamController()
             newController.attach(appState: appState)
@@ -103,6 +98,11 @@ struct ContentView: View {
             self.controller = newController
             isStreaming = true
         }
+    }
+
+    private func disconnectStreaming() {
+        controller?.stop()
+        isStreaming = false
     }
 
     private var statusMessage: String {
@@ -143,14 +143,14 @@ struct ContentView: View {
     private var subtitleText: String {
         switch appState.connectionState {
         case .idle:
-            return "Warte auf Verbindung von deinem PC."
+            return "Drücke 'Start' um zu streamen"
         case .searching:
             return "Suche nach PC im gleichen WLAN…"
         case .connected:
             if let name = appState.pcName {
-                return "Verbunden mit \(name)."
+                return "Verbunden mit \(name)"
             }
-            return "Verbindung aktiv."
+            return "Verbindung aktiv"
         case .error(let msg):
             return "Fehler: \(msg)"
         }
