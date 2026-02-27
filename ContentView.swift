@@ -109,11 +109,18 @@ struct ContentView: View {
                 let newController = StreamController()
                 newController.attach(appState: appState)
                 self.controller = newController
-                // Kamera sofort starten (aber NICHT mit PC verbinden)
-                newController.cameraManager.requestCameraAccess { granted in
+
+                // Kamera sofort starten (aber NICHT mit PC verbinden!)
+                newController.cameraManager.requestCameraAccess { [weak newController] granted in
+                    guard let newController = newController else { return }
                     if granted {
-                        newController.cameraManager.reconfigure()
-                        newController.cameraManager.start()
+                        DispatchQueue.main.async {
+                            newController.cameraManager.reconfigure()
+                            newController.cameraManager.start()
+                            print("[ContentView] Camera started successfully")
+                        }
+                    } else {
+                        print("[ContentView] Camera access denied")
                     }
                 }
             }
