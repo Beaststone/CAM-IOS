@@ -21,12 +21,15 @@ workflows:
 
       - name: Build unsigned iOS App (IPA für Sideloadly/AltStore)
         script: |
+          set -e
+
           # Unsigned Build (Code Signing deaktiviert)
           xcodebuild \
             -project IriunClone.xcodeproj \
             -scheme IriunClone \
             -configuration Release \
             -sdk iphoneos \
+            SYMROOT=build \
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
             build
 
