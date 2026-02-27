@@ -5,13 +5,14 @@ workflows:
     environment:
       xcode: latest
     scripts:
-      - name: Create Xcode Project and Build
+      - name: Generate Xcode Project
         script: |
-          # Dieses Tool erstellt aus deinen Dateien ein echtes Projekt
-          pip install swift-project-generator
-          swift-project-generator --name IriunClone --path .
-          
-          # Jetzt bauen wir die echte IPA mit dem Apple-Compiler
+          # Wir erstellen eine Projektdatei aus deinen losen Swift-Dateien
+          swift package init --type executable
+          swift package generate-xcodeproj
+      - name: Build IPA
+        script: |
+          # Jetzt bauen wir die echte App
           xcode-project build-ipa \
             --project IriunClone.xcodeproj \
             --scheme IriunClone
