@@ -30,12 +30,14 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            // VOLLBILD KAMERA wenn verbunden
-            if let controller = controller, appState.connectionState == .connected {
+            // KAMERA IMMER ANZEIGEN (egal ob connected oder nicht)
+            if let controller = controller {
                 CameraPreviewRepresentable(session: controller.cameraManager.session)
                     .ignoresSafeArea()
+            }
 
-                // Nur X-Button oben rechts
+            // VOLLBILD wenn verbunden - nur X-Button
+            if appState.connectionState == .connected {
                 VStack {
                     HStack {
                         Spacer()
@@ -52,22 +54,24 @@ struct ContentView: View {
                     Spacer()
                 }
             } else {
-                // STATUS-SCREEN wenn NICHT verbunden
-                VStack(spacing: 20) {
+                // OVERLAY mit Status & Button wenn NICHT verbunden
+                VStack(spacing: 0) {
                     Spacer()
 
-                    VStack(spacing: 8) {
-                        Text(titleText)
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                        Text(subtitleText)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding()
+                    VStack(spacing: 12) {
+                        VStack(spacing: 8) {
+                            Text(titleText)
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                            Text(subtitleText)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .padding()
+                        .background(Color.black.opacity(0.6))
+                        .cornerRadius(12)
 
-                    VStack(spacing: 8) {
                         Button(action: startStreaming) {
                             HStack {
                                 Image(systemName: "play.circle.fill")
@@ -92,12 +96,11 @@ struct ContentView: View {
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
-                        .background(Color.gray.opacity(0.1))
+                        .background(Color.gray.opacity(0.2))
                         .cornerRadius(6)
                     }
                     .padding()
-
-                    Spacer()
+                    .background(Color.black.opacity(0.5))
                 }
             }
         }
@@ -106,6 +109,13 @@ struct ContentView: View {
                 let newController = StreamController()
                 newController.attach(appState: appState)
                 self.controller = newController
+                // Kamera sofort starten (aber NICHT mit PC verbinden)
+                newController.cameraManager.requestCameraAccess { granted in
+                    if granted {
+                        newController.cameraManager.reconfigure()
+                        newController.cameraManager.start()
+                    }
+                }
             }
         }
     }
