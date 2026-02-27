@@ -1,7 +1,6 @@
 import SwiftUI
 import AVFoundation
 
-
 struct CameraPreviewRepresentable: UIViewRepresentable {
     var session: AVCaptureSession
 
@@ -67,28 +66,6 @@ struct CameraPreviewRepresentable: UIViewRepresentable {
     }
 }
 
-    private func updateOrientation(_ layer: AVCaptureVideoPreviewLayer) {
-        // Holen der aktuellen Fenster-Szene für die Orientierung
-        let scenes = UIApplication.shared.connectedScenes
-        let windowScene = scenes.first as? UIWindowScene
-        let orientation = windowScene?.interfaceOrientation ?? .portrait
-
-        if let connection = layer.connection, connection.isVideoOrientationSupported {
-            switch orientation {
-            case .portrait:
-                connection.videoOrientation = .portrait
-            case .landscapeLeft:
-                connection.videoOrientation = .landscapeLeft
-            case .landscapeRight:
-                connection.videoOrientation = .landscapeRight
-            case .portraitUpsideDown:
-                connection.videoOrientation = .portraitUpsideDown
-            @unknown default:
-                connection.videoOrientation = .portrait
-            }
-        }
-    }
-}
 extension UIInterfaceOrientation {
     var videoOrientation: AVCaptureVideoOrientation {
         switch self {
