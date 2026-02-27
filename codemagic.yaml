@@ -2,20 +2,22 @@ workflows:
   ios-workflow:
     name: iOS Build Workflow
     instance_type: mac_mini_m2
-    environment:
-      xcode: latest
+    max_build_duration: 10
     scripts:
-      - name: Build with Single File
+      - name: Compile App
         script: |
-          # Wir erstellen eine temporäre App-Struktur
-          mkdir -p IriunClone.app
-          # Wir kompilieren die Hauptdatei direkt zur "Executable"
-          swiftc -sdk $(xcrun --sdk iphoneos --show-sdk-path) -target arm64-apple-ios15.0 IriunCloneApp.swift StreamController.swift VideoStreamClient.swift -o IriunClone.app/IriunClone
-          # Wir kopieren die Info.plist dazu
-          cp Info.plist IriunClone.app/
-          # Wir verpacken es für Sideloadly
-          mkdir Payload
-          cp -r IriunClone.app Payload/
+          # Wir kompilieren ALLE deine Swift-Dateien zu einer echten App
+          xcrun -sdk iphoneos swiftc \
+            -target arm64-apple-ios15.0 \
+            -o IriunClone \
+            *.swift
+          
+          # Wir bauen die Struktur für Sideloadly
+          mkdir -p Payload/IriunClone.app
+          mv IriunClone Payload/IriunClone.app/
+          cp info.plist Payload/IriunClone.app/Info.plist
+          
+          # Verpacken als IPA
           zip -r IriunClone.ipa Payload
     artifacts:
       - "*.ipa"
