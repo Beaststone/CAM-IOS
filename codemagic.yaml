@@ -6,21 +6,24 @@ workflows:
     scripts:
       - name: Compile App Binary
         script: |
-          # 1. Wir nehmen alle deine .swift Dateien und bauen das "Gehirn" der App
+          # Wir kompilieren ALLE Swift-Dateien zu einer echten ausführbaren Datei
           xcrun -sdk iphoneos swiftc \
             -target arm64-apple-ios15.0 \
             -o IriunClone \
             *.swift
           
-          # 2. Wir erstellen die Struktur, die Sideloadly zum Installieren braucht
+          # Wir bauen die Struktur für Sideloadly
           mkdir -p Payload/IriunClone.app
-          
-          # 3. Wir verschieben das Programm und die Info-Datei an den richtigen Platz
           mv IriunClone Payload/IriunClone.app/
-          # Wir stellen sicher, dass info.plist als Info.plist (großes I) im Paket landet
-          cp info.plist Payload/IriunClone.app/Info.plist
           
-          # 4. Wir erstellen die fertige IPA-Datei
+          # Wir stellen sicher, dass die Info.plist richtig geschrieben wird
+          if [ -f "info.plist" ]; then
+            cp info.plist Payload/IriunClone.app/Info.plist
+          elif [ -f "Info.plist" ]; then
+            cp Info.plist Payload/IriunClone.app/Info.plist
+          fi
+          
+          # Verpacken als IPA
           zip -r IriunClone.ipa Payload
     artifacts:
       - "*.ipa"
