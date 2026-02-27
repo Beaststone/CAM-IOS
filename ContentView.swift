@@ -69,99 +69,103 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            // KAMERA IMMER ANZEIGEN (egal ob connected oder nicht) - FULLSCREEN
+            // KAMERA IMMER ANZEIGEN - FULLSCREEN
             if let controller = controller {
                 CameraPreviewRepresentable(session: controller.cameraManager.session)
                     .ignoresSafeArea()
                     .edgesIgnoringSafeArea(.all)
             }
 
-            // OVERLAY: Kamera-Wechsel Button IMMER oben links
+            // TOP BUTTONS OVERLAY
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
+                    // Camera Switch Button (links)
                     Button(action: { switchCamera() }) {
                         Image(systemName: "camera.rotate.fill")
-                            .font(.system(size: 20))
+                            .font(.system(size: 18, weight: .semibold))
                             .foregroundColor(.white)
-                            .padding(10)
-                            .background(Color.black.opacity(0.5))
+                            .frame(width: 44, height: 44)
+                            .background(Color.black.opacity(0.6))
                             .clipShape(Circle())
                     }
-                    .padding(.top, 8)
-                    .padding(.leading, 16)
+                    .padding(.top, 12)
+                    .padding(.leading, 12)
+
                     Spacer()
+
+                    // X Button wenn verbunden (rechts)
+                    if appState.connectionState == .connected {
+                        Button(action: { disconnectStreaming() }) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(width: 44, height: 44)
+                                .background(Color.red.opacity(0.7))
+                                .clipShape(Circle())
+                        }
+                        .padding(.top, 12)
+                        .padding(.trailing, 12)
+                    }
                 }
                 Spacer()
             }
 
-            // VOLLBILD wenn verbunden - nur X-Button
-            if appState.connectionState == .connected {
-                VStack(spacing: 0) {
-                    HStack(spacing: 0) {
-                        Spacer()
-                        Button(action: { disconnectStreaming() }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 28))
-                                .foregroundColor(.white)
-                                .padding(10)
-                                .background(Color.black.opacity(0.4))
-                                .clipShape(Circle())
-                        }
-                        .padding(.top, 8)
-                        .padding(.trailing, 16)
-                    }
-                    Spacer()
-                }
-            } else {
-                // OVERLAY mit Status & Button wenn NICHT verbunden - ZENTRIERT
+            // BOTTOM OVERLAY - nur wenn NICHT verbunden
+            if appState.connectionState != .connected {
                 VStack(spacing: 0) {
                     Spacer()
 
-                    VStack(spacing: 12) {
+                    VStack(spacing: 16) {
+                        // Info Box
                         VStack(spacing: 8) {
                             Text(titleText)
-                                .font(.title2)
-                                .fontWeight(.semibold)
+                                .font(.title3)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
                             Text(subtitleText)
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.8))
                                 .multilineTextAlignment(.center)
                         }
-                        .padding()
-                        .background(Color.black.opacity(0.6))
-                        .cornerRadius(12)
+                        .frame(maxWidth: .infinity)
+                        .padding(12)
+                        .background(Color.black.opacity(0.7))
+                        .cornerRadius(10)
 
+                        // Start Button
                         Button(action: startStreaming) {
-                            HStack {
-                                Image(systemName: "play.circle.fill")
+                            HStack(spacing: 8) {
+                                Image(systemName: "play.fill")
+                                    .font(.system(size: 14, weight: .semibold))
                                 Text("Start Streaming")
+                                    .font(.system(.body, design: .rounded))
+                                    .fontWeight(.semibold)
                             }
                             .frame(maxWidth: .infinity)
-                            .padding(12)
+                            .padding(14)
                             .background(Color.green)
                             .foregroundColor(.white)
-                            .cornerRadius(8)
+                            .cornerRadius(10)
                         }
                         .disabled(appState.connectionState == .searching)
+                        .opacity(appState.connectionState == .searching ? 0.6 : 1.0)
 
+                        // Status Indicator
                         HStack(spacing: 8) {
                             Circle()
                                 .fill(statusColor)
-                                .frame(width: 10, height: 10)
+                                .frame(width: 8, height: 8)
                             Text(statusMessage)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                                .font(.caption2)
+                                .foregroundColor(.white.opacity(0.8))
                             Spacer()
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.gray.opacity(0.2))
-                        .cornerRadius(6)
+                        .padding(10)
+                        .background(Color.black.opacity(0.5))
+                        .cornerRadius(8)
                     }
-                    .padding()
-                    .background(Color.black.opacity(0.5))
-
-                    Spacer()
+                    .padding(16)
+                    .padding(.bottom, 20)
                 }
             }
         }
