@@ -7,6 +7,7 @@ final class StreamController: ObservableObject {
     private let encoder = H264Encoder()
     private let videoClient = VideoStreamClient()
     private let controlClient = ControlChannelClient()
+    private let discoveryClient = DiscoveryClient()
     private var cancellables = Set<AnyCancellable>()
 
     private var dimTimer: Timer?
@@ -32,13 +33,17 @@ final class StreamController: ObservableObject {
                 return
             }
 
-            print("[StreamController] Camera access granted, configuring...")
-            self.cameraManager.reconfigure()
-            self.cameraManager.start()
+            print("[StreamController] Camera access granted, discovering server...")
+            self.discoveryClient.findServer(timeout: 5.0) { [weak self] serverIP in
+                guard let self else { return }
+                print("[StreamController] Discovered server at \(serverIP), configuring...")
+                self.cameraManager.reconfigure()
+                self.cameraManager.start()
 
-            print("[StreamController] Connecting to PC at 192.168.2.229:5000 and 192.168.2.229:5960")
-            self.videoClient.connect(to: "192.168.2.229", port: 5000)
-            self.controlClient.connect(to: "192.168.2.229", port: 5960)
+                print("[StreamController] Connecting to PC at \(serverIP):5000 and \(serverIP):5960")
+                self.videoClient.connect(to: serverIP, port: 5000)
+                self.controlClient.connect(to: serverIP, port: 5960)
+            }
         }
     }
 

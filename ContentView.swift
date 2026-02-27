@@ -21,21 +21,34 @@ struct ContentView: View {
                 }
                 .padding(.top, 16)
 
-                // Kamera-Preview Platzhalter
-                ZStack {
-                    Color.black.opacity(0.8)
-                    VStack(spacing: 12) {
-                        Image(systemName: "camera.fill")
-                            .font(.system(size: 50))
-                            .foregroundColor(.white.opacity(0.5))
-                        Text("Kamera aktiv")
-                            .font(.subheadline)
-                            .foregroundColor(.white.opacity(0.5))
+                // Echte Kamera-Vorschau wenn Streaming aktiv
+                if isStreaming, let controller = controller {
+                    CameraPreviewRepresentable(session: controller.cameraManager.session)
+                        .aspectRatio(4.0/3.0, contentMode: .fit)
+                        .cornerRadius(12)
+                        .padding()
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.green, lineWidth: isStreaming ? 2 : 0)
+                                .padding()
+                        )
+                } else {
+                    // Platzhalter wenn nicht streaming
+                    ZStack {
+                        Color.black.opacity(0.8)
+                        VStack(spacing: 12) {
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 50))
+                                .foregroundColor(.white.opacity(0.5))
+                            Text("Drücke 'Start' um Vorschau zu sehen")
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.5))
+                        }
                     }
+                    .aspectRatio(4.0/3.0, contentMode: .fit)
+                    .cornerRadius(12)
+                    .padding()
                 }
-                .aspectRatio(4.0/3.0, contentMode: .fit)
-                .cornerRadius(12)
-                .padding()
 
                 VStack(spacing: 8) {
                     Button(action: toggleStreaming) {

@@ -126,6 +126,7 @@ private func compressionOutputCallback(outputCallbackRefCon: UnsafeMutableRawPoi
           CMSampleBufferDataIsReady(sampleBuffer),
           let attachmentsArray = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false) as? [[CFString: Any]],
           let attachment = attachmentsArray.first else {
+        print("[H264Encoder] Callback error: status=\(status), ready=\(sampleBuffer?.debugDescription ?? "nil")")
         return
     }
 
@@ -167,15 +168,20 @@ private func compressionOutputCallback(outputCallbackRefCon: UnsafeMutableRawPoi
         if let spsPtr = spsPointer {
             nalData.append(startCode, count: 4)
             nalData.append(spsPtr, count: spsSize)
+            print("[H264Encoder] SPS added: \(spsSize) bytes")
         }
         if let ppsPtr = ppsPointer {
             nalData.append(startCode, count: 4)
             nalData.append(ppsPtr, count: ppsSize)
+            print("[H264Encoder] PPS added: \(ppsSize) bytes")
         }
     }
 
     // Encodierte NALUs aus dem BlockBuffer lesen (Länge + NALU)
-    guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { return }
+    guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { 
+        print("[H264Encoder] No blockBuffer")
+        return 
+    }
 
     var totalLength: Int = 0
     var dataPointer: UnsafeMutablePointer<Int8>?
@@ -184,7 +190,10 @@ private func compressionOutputCallback(outputCallbackRefCon: UnsafeMutableRawPoi
                                              lengthAtOffsetOut: nil,
                                              totalLengthOut: &totalLength,
                                              dataPointerOut: &dataPointer)
-    guard status == kCMBlockBufferNoErr, let baseAddress = dataPointer else { return }
+    guard status == kCMBlockBufferNoErr, let baseAddress = dataPointer else { 
+        print("[H264Encoder] CMBlockBuffer error")
+        return 
+    }
 
     var bufferOffset = 0
     let headerLength = 4 // 4-Byte NALU-Längenpräfix
@@ -207,7 +216,10 @@ private func compressionOutputCallback(outputCallbackRefCon: UnsafeMutableRawPoi
     }
 
     if !nalData.isEmpty {
+        print("[H264Encoder] Encoded frame: \(nalData.count) bytes, keyframe=\(isKeyframe)")
         encoder.onEncoded?(nalData, isKeyframe)
+    } else {
+        print("[H264Encoder] WARNING: Empty nalData after encoding")
     }
 }
 
