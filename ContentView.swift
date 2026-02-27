@@ -5,7 +5,7 @@ struct CameraPreviewRepresentable: UIViewRepresentable {
     var session: AVCaptureSession
 
     func makeUIView(context: Context) -> UIView {
-        let view = UIView(frame: UIScreen.main.bounds)
+        let view = UIView()
         view.backgroundColor = .black
 
         let previewLayer = AVCaptureVideoPreviewLayer(session: session)
@@ -19,24 +19,39 @@ struct CameraPreviewRepresentable: UIViewRepresentable {
     func updateUIView(_ uiView: UIView, context: Context) {
         if let previewLayer = uiView.layer.sublayers?.first as? AVCaptureVideoPreviewLayer {
             previewLayer.frame = uiView.bounds
+            updateOrientation(previewLayer)
+        }
+    }
 
-            let orientation = UIApplication.shared.connectedScenes
-                .compactMap { $0 as? UIWindowScene }
-                .first?
-                .interfaceOrientation ?? .portrait
+    private func updateOrientation(_ layer: AVCaptureVideoPreviewLayer) {
+        let orientation = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first?
+            .interfaceOrientation ?? .portrait
 
-            switch orientation {
-            case .portrait:
-                previewLayer.connection?.videoOrientation = .portrait
-            case .portraitUpsideDown:
-                previewLayer.connection?.videoOrientation = .portraitUpsideDown
-            case .landscapeLeft:
-                previewLayer.connection?.videoOrientation = .landscapeLeft
-            case .landscapeRight:
-                previewLayer.connection?.videoOrientation = .landscapeRight
-            @unknown default:
-                previewLayer.connection?.videoOrientation = .portrait
-            }
+        switch orientation {
+        case .portrait:
+            layer.connection?.videoOrientation = .portrait
+        case .portraitUpsideDown:
+            layer.connection?.videoOrientation = .portraitUpsideDown
+        case .landscapeLeft:
+            layer.connection?.videoOrientation = .landscapeLeft
+        case .landscapeRight:
+            layer.connection?.videoOrientation = .landscapeRight
+        @unknown default:
+            layer.connection?.videoOrientation = .portrait
+        }
+    }
+}
+
+extension UIInterfaceOrientation {
+    var videoOrientation: AVCaptureVideoOrientation {
+        switch self {
+        case .portrait: return .portrait
+        case .landscapeRight: return .landscapeRight
+        case .landscapeLeft: return .landscapeLeft
+        case .portraitUpsideDown: return .portraitUpsideDown
+        @unknown default: return .portrait
         }
     }
 }
