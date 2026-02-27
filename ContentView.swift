@@ -10,15 +10,19 @@ struct CameraPreviewRepresentable: UIViewRepresentable {
 
         let previewLayer = AVCaptureVideoPreviewLayer(session: session)
         previewLayer.videoGravity = .resizeAspectFill
-        previewLayer.frame = view.bounds
+        previewLayer.frame = view.layer.bounds
+        previewLayer.connection?.videoOrientation = .portrait
         view.layer.addSublayer(previewLayer)
+
+        print("[CameraPreviewRepresentable] Layer added, session running: \(session.isRunning)")
 
         return view
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {
         if let previewLayer = uiView.layer.sublayers?.first as? AVCaptureVideoPreviewLayer {
-            previewLayer.frame = uiView.bounds
+            previewLayer.frame = uiView.layer.bounds
+            previewLayer.connection?.videoOrientation = .portrait
         }
     }
 }
@@ -56,6 +60,20 @@ struct ContentView: View {
             } else {
                 // OVERLAY mit Status & Button wenn NICHT verbunden
                 VStack(spacing: 0) {
+                    // Kamera-Wechsel Button oben links
+                    HStack {
+                        Button(action: { switchCamera() }) {
+                            Image(systemName: "camera.rotate.fill")
+                                .font(.system(size: 20))
+                                .foregroundColor(.white)
+                                .padding()
+                                .background(Color.black.opacity(0.4))
+                                .clipShape(Circle())
+                        }
+                        .padding()
+                        Spacer()
+                    }
+
                     Spacer()
 
                     VStack(spacing: 12) {
@@ -143,6 +161,11 @@ struct ContentView: View {
     private func disconnectStreaming() {
         controller?.stop()
         isStreaming = false
+    }
+
+    private func switchCamera() {
+        print("[ContentView] Switching camera...")
+        controller?.cameraManager.switchCamera()
     }
 
     private var statusMessage: String {

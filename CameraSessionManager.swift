@@ -30,12 +30,17 @@ final class CameraSessionManager: NSObject {
     }
 
     func start() {
+        print("[CameraSessionManager] Starting session...")
         if !isConfigured {
             configureSession()
             isConfigured = true
         }
         if !session.isRunning {
-            session.startRunning()
+            // WICHTIG: startRunning() muss auf Main Thread sein!
+            DispatchQueue.main.async { [weak self] in
+                self?.session.startRunning()
+                print("[CameraSessionManager] Session.startRunning() called, now running: \(self?.session.isRunning ?? false)")
+            }
         }
     }
 
