@@ -2,28 +2,25 @@ workflows:
   ios-workflow:
     name: iOS Build Workflow
     instance_type: mac_mini_m2
-    max_build_duration: 10
+    max_build_duration: 15
     scripts:
-      - name: Force Compile
+      - name: Create Real Xcode Project
         script: |
-          # 1. Programmcode zusammenbauen
-          xcrun -sdk iphoneos swiftc \
-            -target arm64-apple-ios15.0 \
-            -o IriunClone \
-            *.swift
+          # Wir nutzen ein Tool, um aus deinen Swift-Dateien ein echtes Projekt zu bauen
+          # Das verhindert den "damaged project" Fehler
+          swift package init --type executable --name IriunClone
           
-          # 2. Struktur aufbauen
+          # Wir kopieren deine echten Dateien in das neue Paket
+          cp *.swift Sources/IriunClone/
+          
+          # Jetzt bauen wir die App als echte Binärdatei
+          swift build -c release --triple arm64-apple-ios15.0-simulator
+          
+          # Wir bauen die IPA-Struktur händisch, aber mit der echten Datei
           mkdir -p Payload/IriunClone.app
-          cp IriunClone Payload/IriunClone.app/
-          
-          # 3. Info.plist sicherstellen
+          cp .build/arm64-apple-ios15.0-simulator/release/IriunClone Payload/IriunClone.app/
           find . -maxdepth 1 -iname "info.plist" -exec cp {} Payload/IriunClone.app/Info.plist \;
           
-          # 4. Hilfsdateien für das System erstellen
-          echo "APPL????" > Payload/IriunClone.app/PkgInfo
-          chmod +x Payload/IriunClone.app/IriunClone
-          
-          # 5. Verpacken
           zip -r IriunClone.ipa Payload
     artifacts:
       - "*.ipa"
