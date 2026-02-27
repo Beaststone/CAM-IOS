@@ -1,5 +1,6 @@
 import AVFoundation
 import Combine
+import UIKit
 
 final class CameraSessionManager: NSObject {
     let session = AVCaptureSession()
@@ -36,7 +37,6 @@ final class CameraSessionManager: NSObject {
             isConfigured = true
         }
         if !session.isRunning {
-            // WICHTIG: startRunning() muss auf Main Thread sein!
             DispatchQueue.main.async { [weak self] in
                 self?.session.startRunning()
                 print("[CameraSessionManager] Session.startRunning() called, now running: \(self?.session.isRunning ?? false)")
@@ -81,6 +81,7 @@ final class CameraSessionManager: NSObject {
         isConfigured = true
     }
 
+    // --- GEÄNDERTE KONFIGURATION ---
     private func configureSession() {
         session.beginConfiguration()
         session.inputs.forEach { session.removeInput($0) }
@@ -103,12 +104,36 @@ final class CameraSessionManager: NSObject {
             }
         }
 
-        if let connection = videoOutput.connection(with: .video),
-           connection.isVideoOrientationSupported {
-            connection.videoOrientation = .portrait
-        }
+        // Setzt die Orientierung beim ersten Mal konfigurieren
+        updateVideoOrientation()
 
         session.commitConfiguration()
+    }
+
+    // --- NEUE FUNKTION FÜR DYNAMISCHE ORIENTIERUNG ---
+    func updateVideoOrientation() {
+        // Wir brauchen die Orientierung der WindowScene für das UI-Layout
+        let scenes = UIApplication.shared.connectedScenes
+        let windowScene = scenes.first as? UIWindowScene
+        let orientation = windowScene?.interfaceOrientation ?? .portrait
+
+        if let connection = videoOutput.connection(with: .video),
+           connection.isVideoOrientationSupported {
+            
+            switch orientation {
+            case .portrait:
+                connection.videoOrientation = .portrait
+            case .landscapeLeft:
+                connection.videoOrientation = .landscapeLeft
+            case .landscapeRight:
+                connection.videoOrientation = .landscapeRight
+            case .portraitUpsideDown:
+                connection.videoOrientation = .portraitUpsideDown
+            @unknown default:
+                connection.videoOrientation = .portrait
+            }
+            print("[CameraSessionManager] Video Data Orientation updated to: \(orientation.rawValue)")
+        }
     }
 
     private func currentDevice() -> AVCaptureDevice? {
@@ -132,4 +157,3 @@ extension CameraSessionManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         sampleBufferPublisher.send(sampleBuffer)
     }
 }
-

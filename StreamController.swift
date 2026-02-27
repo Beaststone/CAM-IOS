@@ -15,6 +15,16 @@ final class StreamController: ObservableObject {
     init() {
         print("[StreamController] Init")
         setupPipelines()
+        
+        // NEU: Beobachtet Drehungen des Handys und aktualisiert den Kamera-Output
+        NotificationCenter.default.addObserver(
+            forName: UIDevice.orientationDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            print("[StreamController] Orientation changed, updating camera output...")
+            self?.cameraManager.updateVideoOrientation()
+        }
     }
 
     func attach(appState: AppState) {
@@ -34,6 +44,10 @@ final class StreamController: ObservableObject {
 
             print("[StreamController] Camera access granted, configuring...")
             self.cameraManager.reconfigure()
+            
+            // NEU: Vor dem Start sicherstellen, dass die Orientierung korrekt ist
+            self.cameraManager.updateVideoOrientation()
+            
             self.cameraManager.start()
 
             let pcIP = "192.168.2.229"
@@ -60,6 +74,10 @@ final class StreamController: ObservableObject {
         controlClient.sendConfig(config)
         cameraManager.apply(config: config)
         encoder.update(config: config)
+        
+        // Auch bei neuen Konfigurationen die Orientierung prüfen
+        cameraManager.updateVideoOrientation()
+        
         resetDimTimer()
     }
 
@@ -86,7 +104,8 @@ final class StreamController: ObservableObject {
             .store(in: &cancellables)
 
         encoder.onEncoded = { [weak self] data, _ in
-            print("[StreamController] Sending \(data.count) bytes")
+            // Print entfernt für bessere Performance, nur bei Debugging aktivieren
+            // print("[StreamController] Sending \(data.count) bytes")
             self?.videoClient.send(frameData: data)
         }
 
@@ -126,5 +145,9 @@ final class StreamController: ObservableObject {
             }
         }
     }
+    
+    deinit {
+        // Observer entfernen, wenn der Controller gelöscht wird
+        NotificationCenter.default.removeObserver(self)
+    }
 }
-
