@@ -8,10 +8,10 @@ final class CameraSessionManager: NSObject {
     private let queue = DispatchQueue(label: "camera.session.queue")
 
     private var currentDevicePosition: AVCaptureDevice.Position = .back
+    private var isConfigured = false
 
     override init() {
         super.init()
-        configureSession()
     }
 
     func requestCameraAccess(completion: @escaping (Bool) -> Void) {
@@ -30,6 +30,10 @@ final class CameraSessionManager: NSObject {
     }
 
     func start() {
+        if !isConfigured {
+            configureSession()
+            isConfigured = true
+        }
         if !session.isRunning {
             session.startRunning()
         }
@@ -69,6 +73,7 @@ final class CameraSessionManager: NSObject {
 
     func reconfigure() {
         configureSession()
+        isConfigured = true
     }
 
     private func configureSession() {
