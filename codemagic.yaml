@@ -2,12 +2,18 @@ workflows:
   ios-workflow:
     name: iOS Build Workflow
     instance_type: mac_mini_m2
+    environment:
+      xcode: latest
     scripts:
-      - name: Build IPA from Swift files
-        script: | 
-          # Wir erstellen hier eine minimale App-Struktur direkt im Build
-          mkdir -p Payload/IriunClone.app
-          # Hinweis: Ohne echten Mac-Compiler bauen wir eine "Dummy"-Struktur für AltStore
-          zip -r IriunClone.ipa Payload
+      - name: Create Xcode Project and Build
+        script: |
+          # Dieses Tool erstellt aus deinen Dateien ein echtes Projekt
+          pip install swift-project-generator
+          swift-project-generator --name IriunClone --path .
+          
+          # Jetzt bauen wir die echte IPA mit dem Apple-Compiler
+          xcode-project build-ipa \
+            --project IriunClone.xcodeproj \
+            --scheme IriunClone
     artifacts:
-      - "*.ipa"
+      - build/ios/ipa/*.ipa
