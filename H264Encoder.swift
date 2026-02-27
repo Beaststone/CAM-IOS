@@ -51,10 +51,18 @@ final class H264Encoder {
         guard let session = compressionSession else { return }
 
         // Realtime, Hardware-Encoding
-        VTSessionSetProperty(session, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue)
-        VTSessionSetProperty(session, kVTCompressionPropertyKey_ExpectedFrameRate, config.fps as CFTypeRef)
-        VTSessionSetProperty(session, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse)
-        VTSessionSetProperty(session, kVTCompressionPropertyKey_ProfileLevel, kVTProfileLevel_H264_High_AutoLevel)
+        VTSessionSetProperty(session,
+                             key: kVTCompressionPropertyKey_RealTime,
+                             value: kCFBooleanTrue)
+        VTSessionSetProperty(session,
+                             key: kVTCompressionPropertyKey_ExpectedFrameRate,
+                             value: config.fps as CFTypeRef)
+        VTSessionSetProperty(session,
+                             key: kVTCompressionPropertyKey_AllowFrameReordering,
+                             value: kCFBooleanFalse)
+        VTSessionSetProperty(session,
+                             key: kVTCompressionPropertyKey_ProfileLevel,
+                             value: kVTProfileLevel_H264_High_AutoLevel)
 
         // Keyframe-Intervall (z.B. alle 2 Sekunden)
         let keyFrameInterval = config.fps * 2
@@ -162,7 +170,11 @@ private func compressionOutputCallback(outputCallbackRefCon: UnsafeMutableRawPoi
         let totalNALULength = Int(naluLength)
         let startCode: [UInt8] = [0, 0, 0, 1]
         nalData.append(startCode, count: 4)
-        nalData.append(baseAddress + bufferOffset + headerLength, count: totalNALULength)
+
+        // Pointer-Typ konvertieren (Int8 -> UInt8) für append(_:count:)
+        let naluPointer = UnsafeRawPointer(baseAddress + bufferOffset + headerLength)
+            .assumingMemoryBound(to: UInt8.self)
+        nalData.append(naluPointer, count: totalNALULength)
 
         bufferOffset += headerLength + totalNALULength
     }
