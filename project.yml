@@ -18,7 +18,6 @@ targets:
       - path: CameraSessionManager.swift
       - path: ContentView.swift
       - path: ControlChannelClient.swift
-      - path: DiscoveryClient.swift
       - path: H264Encoder.swift
       - path: IriunCloneApp.swift
       - path: Models.swift
@@ -37,5 +36,4 @@ targets:
       TARGETED_DEVICE_FAMILY: "1"
     scheme:
       testTargets: []
-
 

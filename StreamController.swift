@@ -7,12 +7,10 @@ final class StreamController: ObservableObject {
     private let encoder = H264Encoder()
     private let videoClient = VideoStreamClient()
     private let controlClient = ControlChannelClient()
-    private let discoveryClient = DiscoveryClient()
     private var cancellables = Set<AnyCancellable>()
 
     private var dimTimer: Timer?
     private weak var appState: AppState?
-    private var pcIPAddress: String?
 
     init() {
         print("[StreamController] Init")
@@ -26,11 +24,6 @@ final class StreamController: ObservableObject {
     func start() {
         print("[StreamController] Starting...")
         UIApplication.shared.isIdleTimerDisabled = true
-
-        // Starte Discovery-Client zuerst
-        appState?.connectionState = .searching
-        discoveryClient.startDiscovery()
-
         cameraManager.requestCameraAccess { [weak self] granted in
             guard let self else { return }
             guard granted else {
@@ -42,6 +35,10 @@ final class StreamController: ObservableObject {
             print("[StreamController] Camera access granted, configuring...")
             self.cameraManager.reconfigure()
             self.cameraManager.start()
+
+            print("[StreamController] Connecting to PC at 192.168.2.229:5000 and 192.168.2.229:5960")
+            self.videoClient.connect(to: "192.168.2.229", port: 5000)
+            self.controlClient.connect(to: "192.168.2.229", port: 5960)
         }
     }
 
@@ -80,14 +77,6 @@ final class StreamController: ObservableObject {
 
     private func setupPipelines() {
         print("[StreamController] Setting up pipelines...")
-
-        // Discovery Listener
-        discoveryClient.discoveredPublisher
-            .sink { [weak self] discovered in
-                self?.onPCDiscovered(name: discovered.name, ipAddress: discovered.ipAddress)
-            }
-            .store(in: &cancellables)
-
         cameraManager.sampleBufferPublisher
             .receive(on: encoder.queue)
             .sink { [weak self] sampleBuffer in
@@ -111,15 +100,6 @@ final class StreamController: ObservableObject {
                 self?.handleConnectionState(state)
             }
             .store(in: &cancellables)
-    }
-
-    private func onPCDiscovered(name: String, ipAddress: String) {
-        print("[StreamController] PC discovered: \(name) at \(ipAddress)")
-        pcIPAddress = ipAddress
-
-        // Verbinde zu dem gefundenen PC
-        videoClient.connect(to: ipAddress, port: 5000)
-        controlClient.connect(to: ipAddress, port: 5960)
     }
 
     private func handleConnectionState(_ state: ControlConnectionState) {
