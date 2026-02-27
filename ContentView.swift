@@ -12,6 +12,13 @@ struct CameraPreviewRepresentable: UIViewRepresentable {
         previewLayer.videoGravity = .resizeAspectFill
         view.layer.addSublayer(previewLayer)
 
+        // Frame MUSS asynchron gesetzt werden!
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            previewLayer.frame = view.bounds
+            print("[CameraPreviewRepresentable] Frame set to: \(view.bounds)")
+            print("[CameraPreviewRepresentable] Session running: \(session.isRunning)")
+        }
+
         return view
     }
 
