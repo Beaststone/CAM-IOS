@@ -50,8 +50,13 @@ final class StreamController: ObservableObject {
             
             self.cameraManager.start()
 
-            let pcIP = "192.168.2.229"
-            print("[StreamController] Connecting to PC at \(pcIP):5000 and \(pcIP):5960")
+            let mode = self.appState?.connectionMode ?? .wifi
+            let pcIP = mode == .usb ? "172.20.10.2" : "192.168.2.229"
+            
+            print("[StreamController] Mode: \(mode). Connecting to PC at \(pcIP):5000 and \(pcIP):5960")
+            
+            self.encoder.isUSBMode = (mode == .usb)
+
             self.videoClient.connect(to: pcIP, port: 5000)
             self.controlClient.connect(to: pcIP, port: 5960)
         }

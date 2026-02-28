@@ -15,3 +15,8 @@ struct StreamConfig: Codable {
     static let defaultConfig = StreamConfig(width: 1280, height: 720, fps: 30)
 }
 
+enum ConnectionMode: String, CaseIterable {
+    case wifi = "WLAN"
+    case usb = "USB"
+}
+

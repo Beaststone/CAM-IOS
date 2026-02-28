@@ -132,6 +132,17 @@ struct ContentView: View {
                     Spacer()
 
                     VStack(spacing: 16) {
+                        
+                        // Connection Mode Selector
+                        Picker("Verbindung", selection: $appState.connectionMode) {
+                            ForEach(ConnectionMode.allCases, id: \.self) { mode in
+                                Text(mode.rawValue).tag(mode)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .background(Color.white.opacity(0.2))
+                        .cornerRadius(8)
+                        
                         // Info Box
                         VStack(spacing: 8) {
                             Text(titleText)

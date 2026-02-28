@@ -10,6 +10,14 @@ final class H264Encoder {
     private var compressionSession: VTCompressionSession?
     private var config: StreamConfig = .defaultConfig
 
+    var isUSBMode: Bool = false {
+        didSet {
+            if isUSBMode != oldValue {
+                print("[H264Encoder] Switched to USB Mode: \(isUSBMode)")
+            }
+        }
+    }
+
     /// Wird bei jedem encodierten Frame aufgerufen.
     var onEncoded: ((Data, Bool) -> Void)?
 
@@ -72,15 +80,28 @@ final class H264Encoder {
         // 4. High Profile: Beste Qualität für hohe Auflösungen
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ProfileLevel, value: kVTProfileLevel_H264_High_AutoLevel)
 
-        // 5. Dynamische Bitratenkontrolle
+        // 5. Dynamische Bitratenkontrolle anhand des Netzwerks (USB vs WLAN)
         let bitRate: Int
-        if config.width >= 3840 { 
-            bitRate = 20_000_000 // 20 Mbps für 4K
-        } else if config.width >= 2560 { 
-            bitRate = 12_000_000 // 12 Mbps für 2K
-        } else { 
-            bitRate = 6_000_000  // 6 Mbps für 1080p
+        if isUSBMode {
+            // Kabelgebunden: Keine Limitierungen!
+            if config.width >= 3840 { 
+                bitRate = 40_000_000 // 40 Mbps für 4K (Crystal Clear)
+            } else if config.width >= 2560 { 
+                bitRate = 25_000_000 // 25 Mbps für 2K
+            } else { 
+                bitRate = 15_000_000 // 15 Mbps für 1080p
+            }
+        } else {
+            // WLAN: UDP verzeiht keinen Jitter, wir müssen sehr konservativ sein
+            if config.width >= 3840 { 
+                bitRate = 12_000_000 // 12 Mbps für 4K (Stark komprimiert aber ruckelfrei)
+            } else if config.width >= 2560 { 
+                bitRate = 8_000_000  // 8 Mbps für 2K
+            } else { 
+                bitRate = 5_000_000  // 5 Mbps für 1080p
+            }
         }
+        
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: bitRate as CFNumber)
 
         // 6. Daten-Limit (Sicherheitsnetz)
