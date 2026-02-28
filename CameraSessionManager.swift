@@ -97,18 +97,31 @@ final class CameraSessionManager: NSObject {
                 let maxSupportedFPS = format.videoSupportedFrameRateRanges.map { $0.maxFrameRate }.max() ?? targetFPS
                 let actualFPS = min(targetFPS, maxSupportedFPS)
                 
-                // HARDCORE 60 FPS LOCK (Phase 5.2): Wir erzwingen 1/60s
-                let duration = CMTime(value: 1, timescale: 60)
-                device.activeVideoMinFrameDuration = duration
-                device.activeVideoMaxFrameDuration = duration
+                // HARDCORE 60 FPS LOCK (Phase 6.2): Wir erzwingen 1/60s mit Hardware-Validierung
+                let targetDuration = CMTime(value: 1, timescale: 60)
+                
+                // Wir klemmen die Dauer an die Hardware-Grenzen des aktuellen Formats
+                let minDuration = format.minExposureDuration
+                let maxDuration = format.maxExposureDuration
+                let safeDuration = CMTimeClampToRange(targetDuration, range: CMTimeRange(start: minDuration, end: maxDuration))
+                
+                device.activeVideoMinFrameDuration = targetDuration
+                device.activeVideoMaxFrameDuration = targetDuration
                 
                 // EXPOSURE & SHUTTER SPEED LOCK: Verhindert 39-FPS-Limit bei Dunkelheit
                 if actualFPS >= 60 {
                     if device.isExposureModeSupported(.custom) {
-                        // Wir erzwingen eine Verschlusszeit von max 1/60s, damit 60 FPS physikalisch möglich sind
-                        // ISO lassen wir auf dem aktuellen Wert oder Auto, falls unterstützt
-                        let currentISO = device.iso
-                        device.setExposureModeCustom(duration: duration, iso: currentISO, completionHandler: nil)
+                        // 1. Zuerst in den Custom Modus wechseln (WICHTIG für Stabilität)
+                        device.exposureMode = .custom
+                        
+                        // 2. ISO validieren und klemmen (Verhindert Abstürze bei ungültigen Werten)
+                        let minISO = format.minISO
+                        let maxISO = format.maxISO
+                        let safeISO = min(max(device.iso, minISO), maxISO)
+                        
+                        // 3. Werte hart setzen
+                        device.setExposureModeCustom(duration: safeDuration, iso: safeISO, completionHandler: nil)
+                        print("[CameraSessionManager] Hard-Locked Exposure: \(safeDuration.seconds)s, ISO: \(safeISO)")
                     } else if device.isExposureModeSupported(.continuousAutoExposure) {
                         device.exposureMode = .continuousAutoExposure
                     }
