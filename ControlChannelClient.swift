@@ -52,6 +52,7 @@ final class ControlChannelClient {
         tcpClientConnection?.start(queue: queue)
     }
 
+    private func startTCPServer(port: UInt16) {
         do {
             let nwPort = NWEndpoint.Port(rawValue: port)!
             let params = NWParameters.tcp
