@@ -8,7 +8,7 @@ import VideoToolbox
 final class H264Encoder {
     let queue = DispatchQueue(label: "h264.encoder.queue")
     private var compressionSession: VTCompressionSession?
-    private var config: StreamConfig = .defaultConfig
+    var config: StreamConfig = .defaultConfig
 
     var isUSBMode: Bool = false {
         didSet {
@@ -96,7 +96,7 @@ final class H264Encoder {
         
         // Rolling Intra Refresh (Essentiell für WLAN/UDP Stabilität)
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: 0 as CFNumber) 
-        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ReferenceRefreshPass, value: kCFBooleanTrue)
+        VTSessionSetProperty(session, key: "ReferenceRefreshPass" as CFString, value: kCFBooleanTrue)
         
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AllowFrameReordering, value: kCFBooleanFalse)
         
@@ -191,7 +191,7 @@ private func compressionOutputCallback(outputCallbackRefCon: UnsafeMutableRawPoi
         
         // HEVC (H.265) hat 3 Parameter-Sets: VPS, SPS, PPS
         // H.264 hat 2 Parameter-Sets: SPS, PPS
-        if encoder.config.useHEVC {
+        if encoder.config.useHEVC ?? true {
             status = CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(formatDesc, parameterSetIndex: 0, parameterSetPointerOut: nil, parameterSetSizeOut: nil, parameterSetCountOut: &parameterSetCount, nalUnitHeaderLengthOut: nil)
         } else {
             status = CMVideoFormatDescriptionGetH264ParameterSetAtIndex(formatDesc, parameterSetIndex: 0, parameterSetPointerOut: nil, parameterSetSizeOut: nil, parameterSetCountOut: &parameterSetCount, nalUnitHeaderLengthOut: nil)
@@ -201,7 +201,7 @@ private func compressionOutputCallback(outputCallbackRefCon: UnsafeMutableRawPoi
             for i in 0..<parameterSetCount {
                 var ptr: UnsafePointer<UInt8>?
                 var size = 0
-                if encoder.config.useHEVC {
+                if encoder.config.useHEVC ?? true {
                     CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(formatDesc, parameterSetIndex: i, parameterSetPointerOut: &ptr, parameterSetSizeOut: &size, parameterSetCountOut: nil, nalUnitHeaderLengthOut: nil)
                 } else {
                     CMVideoFormatDescriptionGetH264ParameterSetAtIndex(formatDesc, parameterSetIndex: i, parameterSetPointerOut: &ptr, parameterSetSizeOut: &size, parameterSetCountOut: nil, nalUnitHeaderLengthOut: nil)
