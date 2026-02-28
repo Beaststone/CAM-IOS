@@ -92,12 +92,17 @@ final class CameraSessionManager: NSObject {
                 // Setzt das exakte Format (wichtig für 2K/4K/60FPS)
                 device.activeFormat = format
                 
-                let duration = CMTime(value: 1, timescale: CMTimeScale(config.fps))
+                // Defensive FPS-Capping: Nie mehr fordern als das Format kann (verhindert Crashes)
+                let targetFPS = Float64(config.fps)
+                let maxSupportedFPS = format.videoSupportedFrameRateRanges.map { $0.maxFrameRate }.max() ?? targetFPS
+                let actualFPS = min(targetFPS, maxSupportedFPS)
+                
+                let duration = CMTime(value: 1, timescale: CMTimeScale(actualFPS))
                 device.activeVideoMinFrameDuration = duration
                 device.activeVideoMaxFrameDuration = duration
                 
                 device.unlockForConfiguration()
-                print("[CameraSessionManager] Applied: \(config.width)x\(config.height) @ \(config.fps) FPS")
+                print("[CameraSessionManager] Applied: \(config.width)x\(config.height) @ \(actualFPS) FPS (Target: \(config.fps))")
             } catch {
                 print("[CameraSessionManager] Configuration Error: \(error)")
             }
@@ -160,48 +165,44 @@ final class CameraSessionManager: NSObject {
     }
 
     private func bestFormat(for device: AVCaptureDevice, config: StreamConfig) -> AVCaptureDevice.Format? {
-        let reqMin = min(config.width, config.height)
-        let reqMax = max(config.width, config.height)
+        let reqMin = Int32(min(config.width, config.height))
         let targetFPS = Float64(config.fps)
 
-        // 1. Filter nach Auflösung (Orientierung-unabhängig)
-        let matchingDimensions = device.formats.filter { format in
-            let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-            let fMin = min(dims.width, dims.height)
-            let fMax = max(dims.width, dims.height)
-            return fMin == reqMin && fMax == reqMax
-        }
-
-        // 2. Suche nach dem Format, das die höchste FPS unterstützt (Sicherheitsmarge)
-        let sortedByFPS = matchingDimensions.sorted { f1, f2 in
-            let max1 = f1.videoSupportedFrameRateRanges.map { $0.maxFrameRate }.max() ?? 0
-            let max2 = f2.videoSupportedFrameRateRanges.map { $0.maxFrameRate }.max() ?? 0
-            return max1 > max2
-        }
-
-        // 3. Nimm das erste Format, das unsere Ziel-FPS unterstützt
-        let bestMatch = sortedByFPS.first { format in
+        // 1. Suche Formate, die die Ziel-FPS unterstützen
+        let fpsSupported = device.formats.filter { format in
             format.videoSupportedFrameRateRanges.contains { range in
                 range.minFrameRate <= targetFPS && range.maxFrameRate >= targetFPS
             }
         }
 
-        if let match = bestMatch ?? sortedByFPS.first {
-            return match
+        // 2. Suche in diesen Formaten nach der besten Auflösung (am nächsten an reqMin)
+        // Wir sortieren so, dass exakte Treffer oder das kleinste Format >= reqMin vorne stehen
+        let formatsToSearch = fpsSupported.isEmpty ? device.formats : fpsSupported
+        
+        let sortedByRes = formatsToSearch.sorted { f1, f2 in
+            let dims1 = CMVideoFormatDescriptionGetDimensions(f1.formatDescription)
+            let dims2 = CMVideoFormatDescriptionGetDimensions(f2.formatDescription)
+            
+            let w1 = min(dims1.width, dims1.height)
+            let w2 = min(dims2.width, dims2.height)
+            
+            // Bevorzuge Formate, die mindestens die geforderte Pixelmenge haben
+            let meetsReq1 = w1 >= reqMin
+            let meetsReq2 = w2 >= reqMin
+            
+            if meetsReq1 && !meetsReq2 { return true }
+            if meetsReq2 && !meetsReq1 { return false }
+            
+            // Wenn beide >= oder beide < sind, nimm das, was näher am Ziel ist
+            return abs(w1 - reqMin) < abs(w2 - reqMin)
         }
 
-        // --- SPEZIALFALL 2K/4K FALLBACK ---
-        // Wenn kein exaktes Match (2K), nimm das nächsthöhere verfügbare Format (4K)
-        let highResFormats = device.formats.filter { format in
-            let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-            return dims.width >= Int32(config.width) && dims.height >= Int32(config.height)
-        }.sorted { f1, f2 in
-            let w1 = CMVideoFormatDescriptionGetDimensions(f1.formatDescription).width
-            let w2 = CMVideoFormatDescriptionGetDimensions(f2.formatDescription).width
-            return w1 < w2 // Nimm das kleinste, das >= config ist
+        let best = sortedByRes.first ?? device.formats.last
+        if let b = best {
+            let dims = CMVideoFormatDescriptionGetDimensions(b.formatDescription)
+            print("[CameraSessionManager] Selected format: \(dims.width)x\(dims.height)")
         }
-
-        return highResFormats.first ?? device.formats.last
+        return best
     }
 }
 
