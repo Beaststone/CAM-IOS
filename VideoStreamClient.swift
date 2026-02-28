@@ -133,14 +133,38 @@ final class VideoStreamClient {
                 }
             })
         } else {
-            // WLAN UDP
+            // WLAN UDP: Wir senden jedes NAL-Unit als einzelnes UDP-Paket!
+            // Das verhindert, dass das OS riesige Frames fragmentiert (was bei Verlust 1 Pakets den ganzen Frame killt).
             guard let conn = udpConnection else { return }
-            pendingSends += 1
-            conn.send(content: frameData, completion: .contentProcessed { [weak self] error in
-                self?.queue.async {
-                    self?.pendingSends -= 1
+            
+            // Annex-B Splitter: Sucht nach 00 00 00 01
+            let separator = Data([0, 0, 0, 1])
+            var offset = 0
+            
+            // Wir überspringen den ersten Separator am Anfang
+            if frameData.starts(with: separator) {
+                offset = 4
+            }
+            
+            while offset < frameData.count {
+                var nextSeparator = frameData.range(of: separator, options: [], in: offset..<frameData.count)
+                let naluEnd = nextSeparator?.lowerBound ?? frameData.count
+                
+                // Wir bauen das NALU-Paket inkl. Start-Code
+                var naluPacket = Data([0, 0, 0, 1])
+                naluPacket.append(frameData[offset..<naluEnd])
+                
+                if !naluPacket.isEmpty {
+                    pendingSends += 1
+                    conn.send(content: naluPacket, completion: .contentProcessed { [weak self] error in
+                        self?.queue.async {
+                            self?.pendingSends -= 1
+                        }
+                    })
                 }
-            })
+                
+                offset = naluEnd + 4
+            }
         }
     }
 

@@ -110,22 +110,20 @@ final class H264Encoder {
         }
         
         // Bitrate-Management
-        let baseBitRate: Int
+        // Da wir jetzt Slicing nutzen, können wir wieder hohe Bitraten fahren (keine UDP-Fragmentierung mehr).
+        let bitRate: Int
         if isUSBMode {
-            baseBitRate = config.width >= 3840 ? 40_000_000 : (config.width >= 2560 ? 28_000_000 : 18_000_000)
+            bitRate = config.width >= 3840 ? 40_000_000 : (config.width >= 2560 ? 28_000_000 : 18_000_000)
         } else {
-            // WLAN: Wir kappen die Bitrate hart bei einem "UDP-Sicherheits-Bitrate"
-            // Ein UDP Paket darf max 65KB haben. Wir zielen auf 50KB pro Frame im Schnitt ab.
-            let safetyMaxBitrate = Int(Double(config.fps) * 50_000 * 8) // 50KB pro Frame * FPS * 8 bits
-            let requestedBitrate = config.width >= 3840 ? 20_000_000 : (config.width >= 2560 ? 12_000_000 : 8_000_000)
-            baseBitRate = min(requestedBitrate, safetyMaxBitrate)
+            bitRate = config.width >= 3840 ? 15_000_000 : (config.width >= 2560 ? 10_000_000 : 6_000_000)
         }
         
-        // FPS-Skalierung für WLAN: Verhindert, dass 30/15fps durch zu große Einzel-Frames das WLAN verstopfen
-        let fpsFactor = Double(config.fps) / 60.0
-        let bitRate = isUSBMode ? baseBitRate : Int(Double(baseBitRate) * max(0.5, fpsFactor))
-        
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: bitRate as CFNumber)
+
+        // HARDWARE SLICING: Das ist der Key für WLAN-Stabilität!
+        // Wir zwingen den Encoder, das Bild in viele kleine Stücke (NALUs) zu zerteilen.
+        // Jedes Stück ist max 1200 Bytes groß (passt perfekt in ein MTU-Paket).
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxSliceBytes, value: 1200 as CFNumber)
 
         let byteLimit = (bitRate * 12 / 10) / 8 // 1.2x Puffer gegen Spikes
         let limit = [byteLimit, 1] as CFArray
