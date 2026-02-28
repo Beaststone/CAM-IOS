@@ -40,6 +40,10 @@ final class H264Encoder {
         queue.async { [weak self] in
             guard let self = self else { return }
             print("[H264Encoder] Updating config: \(config.width)x\(config.height) @ \(config.fps)fps")
+            
+            // Phase 7: Sicheres Invalidate bevor neue Config greift
+            self.internalStop()
+            
             self.config = config
             self.setupSession()
         }
@@ -60,10 +64,10 @@ final class H264Encoder {
 
     private func internalStop() {
         if let session = compressionSession {
-            VTCompressionSessionCompleteFrames(session, untilPresentationTimeStamp: .positiveInfinity)
+            // Phase 7: Erst hart invalidieren, dann auf nil setzen
             VTCompressionSessionInvalidate(session)
             compressionSession = nil
-            print("[H264Encoder] Stopped")
+            print("[H264Encoder] Session Invalidated")
         }
     }
 

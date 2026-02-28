@@ -97,35 +97,19 @@ final class CameraSessionManager: NSObject {
                 let maxSupportedFPS = format.videoSupportedFrameRateRanges.map { $0.maxFrameRate }.max() ?? targetFPS
                 let actualFPS = min(targetFPS, maxSupportedFPS)
                 
-                // HARDCORE 60 FPS LOCK (Phase 6.2): Wir erzwingen 1/60s mit Hardware-Validierung
+                // PHASE 7: HELLIGKEITS-FIX & 60 FPS LOCK
+                // Wir nutzen wieder die Automatik für Helligkeit, 
+                // klemmen die Hardware aber auf 60 FPS fest.
                 let targetDuration = CMTime(value: 1, timescale: 60)
-                
-                // Wir klemmen die Dauer an die Hardware-Grenzen des aktuellen Formats
-                let minDuration = format.minExposureDuration
-                let maxDuration = format.maxExposureDuration
-                let safeDuration = CMTimeClampToRange(targetDuration, range: CMTimeRange(start: minDuration, end: maxDuration))
-                
                 device.activeVideoMinFrameDuration = targetDuration
                 device.activeVideoMaxFrameDuration = targetDuration
                 
-                // EXPOSURE & SHUTTER SPEED LOCK: Verhindert 39-FPS-Limit bei Dunkelheit
-                if actualFPS >= 60 {
-                    if device.isExposureModeSupported(.custom) {
-                        // 1. Zuerst in den Custom Modus wechseln (WICHTIG für Stabilität)
-                        device.exposureMode = .custom
-                        
-                        // 2. ISO validieren und klemmen (Verhindert Abstürze bei ungültigen Werten)
-                        let minISO = format.minISO
-                        let maxISO = format.maxISO
-                        let safeISO = min(max(device.iso, minISO), maxISO)
-                        
-                        // 3. Werte hart setzen
-                        device.setExposureModeCustom(duration: safeDuration, iso: safeISO, completionHandler: nil)
-                        print("[CameraSessionManager] Hard-Locked Exposure: \(safeDuration.seconds)s, ISO: \(safeISO)")
-                    } else if device.isExposureModeSupported(.continuousAutoExposure) {
-                        device.exposureMode = .continuousAutoExposure
-                    }
+                if device.isExposureModeSupported(.continuousAutoExposure) {
+                    device.exposureMode = .continuousAutoExposure
                 }
+                
+                // Falls wir doch manuell eingreifen wollen (Thermal Fallback etc.):
+                // print("[CameraSessionManager] Ready for 60 FPS (Auto-Exposure)")
 
                 device.unlockForConfiguration()
                 print("[CameraSessionManager] Applied: \(config.width)x\(config.height) @ \(actualFPS) FPS (Target: \(config.fps))")
