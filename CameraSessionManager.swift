@@ -60,26 +60,11 @@ final class CameraSessionManager: NSObject {
         session.beginConfiguration()
         
         // --- AUFLÖSUNGS-PRESETS INKL. 4K & 2K ---
-        if config.width >= 3840 {
-            if session.canSetSessionPreset(.hd4K3840x2160) {
-                session.sessionPreset = .hd4K3840x2160
-            } else {
-                session.sessionPreset = .hd1920x1080 // Fallback
-            }
-        } else if config.width >= 2560 {
-            // Für 2K gibt es kein direktes Preset, wir nutzen High oder 4K 
-            // Das Format-Tuning unten erledigt den Rest
-            if session.canSetSessionPreset(.hd4K3840x2160) {
-                session.sessionPreset = .hd4K3840x2160
-            } else {
-                session.sessionPreset = .hd1920x1080
-            }
-        } else if config.width >= 1920 {
-            session.sessionPreset = .hd1920x1080
-        } else if config.width >= 1280 {
-            session.sessionPreset = .hd1280x720
+        // PHASE 8: Wir priorisieren FPS vor Automatik
+        if session.canSetSessionPreset(.inputPriority) {
+            session.sessionPreset = .inputPriority
         } else {
-            session.sessionPreset = .vga640x480
+            session.sessionPreset = .hd1920x1080
         }
         
         session.commitConfiguration()
