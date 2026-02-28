@@ -97,12 +97,24 @@ final class CameraSessionManager: NSObject {
                 let maxSupportedFPS = format.videoSupportedFrameRateRanges.map { $0.maxFrameRate }.max() ?? targetFPS
                 let actualFPS = min(targetFPS, maxSupportedFPS)
                 
-                // PHASE 7: HELLIGKEITS-FIX & 60 FPS LOCK
-                // Wir nutzen wieder die Automatik für Helligkeit, 
-                // klemmen die Hardware aber auf 60 FPS fest.
-                let targetDuration = CMTime(value: 1, timescale: 60)
-                device.activeVideoMinFrameDuration = targetDuration
-                device.activeVideoMaxFrameDuration = targetDuration
+                // PHASE 7.1: DYNAMISCHER FPS LOCK (SIGABRT FIX)
+                // Wir fordern die Dauer basierend auf den tatsächlich ermittelten actualFPS.
+                let targetDuration = CMTime(value: 1, timescale: Int32(actualFPS))
+                
+                // Wir validieren die Dauer gegen die Hardware-Ranges des aktuellen Formats
+                if let range = format.videoSupportedFrameRateRanges.first(where: { $0.maxFrameRate >= actualFPS && $0.minFrameRate <= actualFPS }) {
+                    let minDuration = range.minFrameDuration
+                    let maxDuration = range.maxFrameDuration
+                    let safeDuration = CMTimeClampToRange(targetDuration, range: CMTimeRange(start: minDuration, end: maxDuration))
+                    
+                    device.activeVideoMinFrameDuration = safeDuration
+                    device.activeVideoMaxFrameDuration = safeDuration
+                    print("[CameraSessionManager] Applied Hardware-Validated Duration: \(safeDuration.seconds)s (FPS: \(actualFPS))")
+                } else {
+                    // Fallback: Nur setzen wenn wir sicher sind
+                    device.activeVideoMinFrameDuration = targetDuration
+                    device.activeVideoMaxFrameDuration = targetDuration
+                }
                 
                 if device.isExposureModeSupported(.continuousAutoExposure) {
                     device.exposureMode = .continuousAutoExposure
