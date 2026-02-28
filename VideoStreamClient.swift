@@ -41,9 +41,11 @@ final class VideoStreamClient {
         do {
             let nwPort = NWEndpoint.Port(rawValue: port)!
             
-            // TCP Parameter - optimiert für Latency
+            // TCP Parameter - optimiert für USBMuxd Loopback
+            // Native USB Tunnel verbinden sich immer via IPv4 auf 127.0.0.1
             let params = NWParameters.tcp
             params.allowLocalEndpointReuse = true
+            params.requiredInterfaceType = .loopback
             
             tcpListener = try NWListener(using: params, on: nwPort)
             

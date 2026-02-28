@@ -52,11 +52,11 @@ final class ControlChannelClient {
         tcpClientConnection?.start(queue: queue)
     }
 
-    private func startTCPServer(port: UInt16) {
         do {
             let nwPort = NWEndpoint.Port(rawValue: port)!
             let params = NWParameters.tcp
             params.allowLocalEndpointReuse = true
+            params.requiredInterfaceType = .loopback
             
             tcpListener = try NWListener(using: params, on: nwPort)
             
