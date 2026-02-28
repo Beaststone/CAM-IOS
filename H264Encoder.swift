@@ -190,20 +190,3 @@ private func compressionOutputCallback(outputCallbackRefCon: UnsafeMutableRawPoi
     }
 }
 
-private func setupSession() {
-    // ... (vorheriger Code)
-    
-    // Dynamische Bitrate je nach Auflösung
-    let bitRate: Int
-    if config.width >= 3840 { bitRate = 20_000_000 }      // 4K: 20 Mbps
-    else if config.width >= 2560 { bitRate = 12_000_000 } // 2K: 12 Mbps
-    else { bitRate = 6_000_000 }                         // 1080p: 6 Mbps
-
-    VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: bitRate as CFNumber)
-    
-    // Datenlimit (sehr wichtig für 4K/2K Stabilität)
-    let limit = [bitRate / 8, 1] as CFArray
-    VTSessionSetProperty(session, key: kVTCompressionPropertyKey_DataRateLimits, value: limit)
-    
-    // ...
-}
