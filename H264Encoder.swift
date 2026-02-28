@@ -97,7 +97,7 @@ final class H264Encoder {
         if isUSBMode {
             // Kabelgebunden: Moderate Bitrate für 2K um OOM zu verhindern
             if config.width >= 3840 { 
-                bitRate = 45_000_000 // Von 60 auf 45 reduziert für Stabilität
+                bitRate = 35_000_000 // Von 45 auf 35 reduziert für 4K60 Stabilität
             } else if config.width >= 2560 { 
                 bitRate = 25_000_000 // Von 35 auf 25 reduziert
             } else { 
