@@ -39,10 +39,13 @@ final class H264Encoder {
     func update(config: StreamConfig) {
         queue.async { [weak self] in
             guard let self = self else { return }
-            print("[H264Encoder] Updating config: \(config.width)x\(config.height) @ \(config.fps)fps")
+            print("[H264Encoder] EMERGENCY: Resetting Session for \(config.width)x\(config.height)")
             
-            // Phase 7: Sicheres Invalidate bevor neue Config greift
-            self.internalStop()
+            // Phase 9: Atomic Invalidate
+            if let session = self.compressionSession {
+                VTCompressionSessionInvalidate(session)
+                self.compressionSession = nil
+            }
             
             self.config = config
             self.setupSession()
