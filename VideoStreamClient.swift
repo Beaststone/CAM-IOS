@@ -46,7 +46,9 @@ final class VideoStreamClient {
         do {
             let nwPort = NWEndpoint.Port(rawValue: port)!
             let params = NWParameters.tcp
-            params.noDelay = true // Sofortiges Senden ohne TCP-Pufferung (Nagle Off)
+            if let tcpOptions = params.defaultProtocolStack.transportProtocol as? NWProtocolTCP.Options {
+                tcpOptions.noDelay = true // Sofortiges Senden ohne TCP-Pufferung (Nagle Off)
+            }
             params.allowLocalEndpointReuse = true
             // params.requiredInterfaceType = .loopback // Entfernt für maximale Kompatibilität falls usbmuxd anders routet
             
@@ -114,7 +116,7 @@ final class VideoStreamClient {
             guard let conn = tcpClientConnection else { return }
             
             // Framing: 4-Byte Length Header (Little Endian)
-            var length = UInt32(frameData.count).littleEndian
+            let length = UInt32(frameData.count).littleEndian
             
             // Wir bauen das Paket effizient zusammen
             var payload = Data(capacity: 4 + frameData.count)
