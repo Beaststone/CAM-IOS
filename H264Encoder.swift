@@ -5,6 +5,10 @@ import VideoToolbox
 /// Hardware-H.264-Encoder für iPhone-Kamera.
 /// - Nimmt `CMSampleBuffer` Frames entgegen und liefert Annex-B H.264 NALUs.
 /// Optimiert für 4K/2K-Streaming und maximale Stabilität (Iriun-Style).
+
+// FALLBACK: Falls die Konstante im aktuellen SDK fehlt (Bridge-Problem)
+let kVTCompressionPropertyKey_MaxSliceBytes = "MaxSliceBytes" as CFString
+
 final class H264Encoder {
     let queue = DispatchQueue(label: "h264.encoder.queue")
     private var compressionSession: VTCompressionSession?
@@ -121,9 +125,10 @@ final class H264Encoder {
         }
         
         // Bitrate-Management
-        // Da wir jetzt Slicing nutzen, können wir wieder hohe Bitraten fahren (keine UDP-Fragmentierung mehr).
         let bitRate: Int
-        if isUSBMode {
+        if let preferredBitrate = config.bitrate {
+            bitRate = preferredBitrate
+        } else if isUSBMode {
             bitRate = config.width >= 3840 ? 40_000_000 : (config.width >= 2560 ? 28_000_000 : 18_000_000)
         } else {
             bitRate = config.width >= 3840 ? 15_000_000 : (config.width >= 2560 ? 10_000_000 : 6_000_000)

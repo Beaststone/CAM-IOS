@@ -12,8 +12,17 @@ struct StreamConfig: Codable {
     var height: Int
     var fps: Int
     var useHEVC: Bool?
+    var bitrate: Int? = nil
 
-    static let defaultConfig = StreamConfig(width: 1280, height: 720, fps: 30, useHEVC: true)
+    init(width: Int, height: Int, fps: Int, useHEVC: Bool? = true, bitrate: Int? = nil) {
+        self.width = width
+        self.height = height
+        self.fps = fps
+        self.useHEVC = useHEVC
+        self.bitrate = bitrate
+    }
+
+    static let defaultConfig = StreamConfig(width: 1280, height: 720, fps: 30, useHEVC: true, bitrate: 6000000)
 }
 
 struct ConfigMessage: Codable {

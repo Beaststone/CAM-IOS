@@ -150,7 +150,7 @@ final class VideoStreamClient {
             }
             
             while offset < frameData.count {
-                var nextSeparator = frameData.range(of: separator, options: [], in: offset..<frameData.count)
+                let nextSeparator = frameData.range(of: separator, options: [], in: offset..<frameData.count)
                 let naluEnd = nextSeparator?.lowerBound ?? frameData.count
                 
                 // Wir bauen das NALU-Paket inkl. Start-Code
