@@ -95,29 +95,31 @@ final class H264Encoder {
         // 5. Dynamische Bitratenkontrolle anhand des Netzwerks (USB vs WLAN)
         let bitRate: Int
         if isUSBMode {
-            // Kabelgebunden: Moderate Bitrate für 2K um OOM zu verhindern
+            // Kabelgebunden: Viel Bandbreite möglich
             if config.width >= 3840 { 
-                bitRate = 35_000_000 // Von 45 auf 35 reduziert für 4K60 Stabilität
+                bitRate = 35_000_000 // 4K60 Stabilität
             } else if config.width >= 2560 { 
-                bitRate = 25_000_000 // Von 35 auf 25 reduziert
+                bitRate = 25_000_000 
             } else { 
                 bitRate = 15_000_000 
             }
         } else {
-            // WLAN: UDP verzeiht keinen Jitter
+            // WLAN: Erhöhte Bitraten für "perfekte" Qualität ohne Matsch
             if config.width >= 3840 { 
-                bitRate = 12_000_000 
+                bitRate = 25_000_000 // Von 12 auf 25 erhöht für 4K WLAN
             } else if config.width >= 2560 { 
-                bitRate = 8_000_000  
+                bitRate = 18_000_000 // Von 8 auf 18 erhöht für 2K WLAN
             } else { 
-                bitRate = 5_000_000  
+                bitRate = 12_000_000 // Von 5 auf 12 erhöht für 1080p WLAN
             }
         }
         
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: bitRate as CFNumber)
 
-        // 6. Daten-Limit (WICHTIG gegen Spikes)
-        let limit = [bitRate / 8, 1] as CFArray
+        // 6. Daten-Limit (WICHTIG gegen Spikes & Matsch)
+        // Wir erlauben dem Encoder, kurzzeitig mehr zu nehmen (1.5x) um Qualität in hektischen Szenen zu halten
+        let byteLimit = (bitRate * 15 / 10) / 8 // 1.5x Bitrate in Bytes
+        let limit = [byteLimit, 1] as CFArray
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_DataRateLimits, value: limit)
 
         // 7. GOP-Size (Keyframe-Intervall: Alle 1 Sekunde für schnellere Erholung bei Fehlern)
