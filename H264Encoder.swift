@@ -4,7 +4,7 @@ import VideoToolbox
 
 /// Hardware-H.264-Encoder für iPhone-Kamera.
 /// - Nimmt `CMSampleBuffer` Frames entgegen und liefert Annex-B H.264 NALUs.
-/// Optimiert für 4K-Streaming und maximale Stabilität (Iriun-Style).
+/// Optimiert für 4K/2K-Streaming und maximale Stabilität (Iriun-Style).
 final class H264Encoder {
     let queue = DispatchQueue(label: "h264.encoder.queue")
     private var compressionSession: VTCompressionSession?
@@ -58,38 +58,42 @@ final class H264Encoder {
 
         compressionSession = session
 
-        // --- IRIUN-LEVEL TUNING FÜR 4K STABILITÄT ---
+        // --- IRIUN-LEVEL TUNING FÜR 4K/2K STABILITÄT ---
         
-        // 1. Echtzeit-Modus: Minimiert Verzögerung (sehr wichtig für Webcams)
+        // 1. Echtzeit-Modus: Minimiert Verzögerung
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_RealTime, value: kCFBooleanTrue)
         
         // 2. Erwartete Framerate setzen
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: NSNumber(value: config.fps))
         
-        // 3. Low Latency: Verhindert das Umordnen von Frames (keine B-Frames)
+        // 3. Low Latency: Keine B-Frames
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AllowFrameReordering, value: kCFBooleanFalse)
         
-        // 4. High Profile: Ermöglicht bessere Kompression bei 4K Auflösung
+        // 4. High Profile: Beste Qualität für hohe Auflösungen
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ProfileLevel, value: kVTProfileLevel_H264_High_AutoLevel)
 
-        // 5. Aggressive Bitratenkontrolle: 
-        // 15 Mbps ist ein sehr guter Wert für 4K über WLAN (scharf aber stabil).
-        let bitRate = 15_000_000 
+        // 5. Dynamische Bitratenkontrolle
+        let bitRate: Int
+        if config.width >= 3840 { 
+            bitRate = 20_000_000 // 20 Mbps für 4K
+        } else if config.width >= 2560 { 
+            bitRate = 12_000_000 // 12 Mbps für 2K
+        } else { 
+            bitRate = 6_000_000  // 6 Mbps für 1080p
+        }
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: bitRate as CFNumber)
 
-        // 6. Daten-Limit (Das Sicherheitsnetz gegen Handy-Abstürze):
-        // Verhindert, dass kurzzeitig zu viele Daten den RAM oder das WLAN fluten.
+        // 6. Daten-Limit (Sicherheitsnetz)
         let limit = [bitRate / 8, 1] as CFArray
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_DataRateLimits, value: limit)
 
-        // 7. GOP-Size (Keyframe-Intervall): 
-        // Nur alle 3 Sekunden ein schweres Vollbild spart massiv Bandbreite.
+        // 7. GOP-Size (Keyframe-Intervall)
         let keyFrameInterval = config.fps * 3
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: NSNumber(value: keyFrameInterval))
 
         let prepareStatus = VTCompressionSessionPrepareToEncodeFrames(session)
         if prepareStatus == noErr {
-            print("[H264Encoder] Session ready für 4K: \(width)x\(height) @ \(config.fps)fps")
+            print("[H264Encoder] Session ready: \(width)x\(height) @ \(config.fps)fps (\(bitRate/1000000) Mbps)")
         } else {
             print("[H264Encoder] Prepare failed: \(prepareStatus)")
         }
@@ -134,7 +138,6 @@ private func compressionOutputCallback(outputCallbackRefCon: UnsafeMutableRawPoi
     guard let outputCallbackRefCon = outputCallbackRefCon else { return }
     let encoder = Unmanaged<H264Encoder>.fromOpaque(outputCallbackRefCon).takeUnretainedValue()
 
-    // Prüfen ob es ein Keyframe ist
     let isKeyframe: Bool
     if let attachmentsArray = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false) as? [[CFString: Any]],
        let attachment = attachmentsArray.first {
@@ -147,7 +150,6 @@ private func compressionOutputCallback(outputCallbackRefCon: UnsafeMutableRawPoi
     guard let formatDesc = CMSampleBufferGetFormatDescription(sampleBuffer) else { return }
     var nalData = Data()
 
-    // SPS/PPS bei Keyframes voranstellen
     if isKeyframe {
         var parameterSetCount = 0
         CMVideoFormatDescriptionGetH264ParameterSetAtIndex(formatDesc, parameterSetIndex: 0, parameterSetPointerOut: nil, parameterSetSizeOut: nil, parameterSetCountOut: &parameterSetCount, nalUnitHeaderLengthOut: nil)
@@ -157,13 +159,12 @@ private func compressionOutputCallback(outputCallbackRefCon: UnsafeMutableRawPoi
             var size = 0
             CMVideoFormatDescriptionGetH264ParameterSetAtIndex(formatDesc, parameterSetIndex: i, parameterSetPointerOut: &ptr, parameterSetSizeOut: &size, parameterSetCountOut: nil, nalUnitHeaderLengthOut: nil)
             if let p = ptr {
-                nalData.append(contentsOf: [0, 0, 0, 1]) // Start Code
+                nalData.append(contentsOf: [0, 0, 0, 1])
                 nalData.append(p, count: size)
             }
         }
     }
 
-    // NALUs extrahieren
     guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { return }
     var totalLength = 0
     var dataPointer: UnsafeMutablePointer<Int8>?
@@ -177,7 +178,7 @@ private func compressionOutputCallback(outputCallbackRefCon: UnsafeMutableRawPoi
             memcpy(&naluLength, baseAddress + offset, 4)
             naluLength = CFSwapInt32BigToHost(naluLength)
             
-            nalData.append(contentsOf: [0, 0, 0, 1]) // Start Code
+            nalData.append(contentsOf: [0, 0, 0, 1])
             let naluPtr = UnsafeRawPointer(baseAddress + offset + 4).assumingMemoryBound(to: UInt8.self)
             nalData.append(naluPtr, count: Int(naluLength))
             
@@ -189,4 +190,3 @@ private func compressionOutputCallback(outputCallbackRefCon: UnsafeMutableRawPoi
         encoder.onEncoded?(nalData, isKeyframe)
     }
 }
-
