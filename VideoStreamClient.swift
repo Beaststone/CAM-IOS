@@ -105,7 +105,7 @@ final class VideoStreamClient {
     }
 
     private var pendingSends = 0
-    private let maxPendingSends = 10 // Max 10 Frames in der Queue bevor wir droppen
+    private let maxPendingSends = 30 // Phase 15: Erhöht von 10 auf 30 für 4K/60FPS Bursts
 
     /// Sendet einen Annex-B H.264-Frame.
     /// UDP für WLAN, TCP für natives USB-Kabel.

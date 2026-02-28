@@ -144,6 +144,11 @@ final class H264Encoder {
         }
         
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: bitRate as CFNumber)
+        
+        // PHASE 15: Wir erlauben 50% Spitzenlast (Data Rate Limits)
+        // Das verhindert, dass der Encoder bei komplexen 4K-Szenen die FPS drosselt.
+        let dataRateLimits: [Int] = [bitRate * 3 / 2 / 8, 1] // bytes per second, duration in seconds
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_DataRateLimits, value: dataRateLimits as CFArray)
 
         // HARDWARE SLICING: Das ist der Key für WLAN-Stabilität!
         // Wir zwingen den Encoder, das Bild in viele kleine Stücke (NALUs) zu zerteilen.

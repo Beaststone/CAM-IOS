@@ -150,20 +150,29 @@ final class CameraSessionManager: NSObject {
     }
 
     func updateVideoOrientation() {
-        let scenes = UIApplication.shared.connectedScenes
-        let windowScene = scenes.first as? UIWindowScene
-        let orientation = windowScene?.interfaceOrientation ?? .portrait
-
+        let orientation = UIDevice.current.orientation
+        
         if let connection = videoOutput.connection(with: .video),
            connection.isVideoOrientationSupported {
             switch orientation {
             case .portrait: connection.videoOrientation = .portrait
-            case .landscapeLeft: connection.videoOrientation = .landscapeLeft
-            case .landscapeRight: connection.videoOrientation = .landscapeRight
+            case .landscapeLeft: connection.videoOrientation = .landscapeRight // iOS Camera logic is inverted
+            case .landscapeRight: connection.videoOrientation = .landscapeLeft
             case .portraitUpsideDown: connection.videoOrientation = .portraitUpsideDown
-            case .unknown: connection.videoOrientation = .portrait
-            @unknown default: connection.videoOrientation = .portrait
+            default:
+                // Fallback auf Interface Orientation falls Device Orientation flach liegt
+                let scenes = UIApplication.shared.connectedScenes
+                let windowScene = scenes.first as? UIWindowScene
+                let interfaceOrientation = windowScene?.interfaceOrientation ?? .portrait
+                switch interfaceOrientation {
+                case .portrait: connection.videoOrientation = .portrait
+                case .landscapeLeft: connection.videoOrientation = .landscapeLeft
+                case .landscapeRight: connection.videoOrientation = .landscapeRight
+                case .portraitUpsideDown: connection.videoOrientation = .portraitUpsideDown
+                default: connection.videoOrientation = .portrait
+                }
             }
+            print("[CameraSessionManager] Orientation updated to: \(connection.videoOrientation.rawValue)")
         }
     }
 
