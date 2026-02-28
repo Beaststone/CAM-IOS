@@ -22,7 +22,7 @@ final class H264Encoder {
     var onEncoded: ((Data, Bool) -> Void)?
 
     // Cache für Parameter Sets (SPS, PPS, VPS) um sie jedem Frame voranzustellen (Annex-B)
-    private var cachedParameterSets: Data = Data()
+    fileprivate var cachedParameterSets: Data = Data()
 
     init() {
         print("[H264Encoder] Init")
