@@ -112,8 +112,8 @@ final class H264Encoder {
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: NSNumber(value: config.fps))
         
         // 2. IDR Frames alle 1 Sekunde für garantierte Erholung (WebRTC-Style)
-        // Bei 30 FPS = alle 30 Frames, bei 60 FPS = alle 60 Frames.
-        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: NSNumber(value: config.fps)) 
+        // Wir fixieren das auf 30 Frames (ca. 1s bei 30fps), um konstante Heilung zu garantieren.
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: 30 as CFNumber) 
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, value: 1.0 as CFNumber)
         
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AllowFrameReordering, value: kCFBooleanFalse)
@@ -131,7 +131,8 @@ final class H264Encoder {
         } else if isUSBMode {
             bitRate = config.width >= 3840 ? 40_000_000 : (config.width >= 2560 ? 28_000_000 : 18_000_000)
         } else {
-            bitRate = config.width >= 3840 ? 15_000_000 : (config.width >= 2560 ? 10_000_000 : 6_000_000)
+            // WLAN-Optimiert: 4K auf 12Mbps drosseln um Stau (graue Bilder) zu vermeiden.
+            bitRate = config.width >= 3840 ? 12_000_000 : (config.width >= 2560 ? 9_000_000 : 5_000_000)
         }
         
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: bitRate as CFNumber)
