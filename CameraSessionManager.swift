@@ -163,20 +163,28 @@ final class CameraSessionManager: NSObject {
         let targetHeight = Int32(config.height)
         let targetFPS = Float64(config.fps)
 
-        // Filtert nach Auflösung
+        // 1. Filter nach Auflösung
         let matchingDimensions = device.formats.filter { format in
             let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
             return dims.width == targetWidth && dims.height == targetHeight
         }
 
-        // Sucht FPS-Match
-        let bestMatch = matchingDimensions.first { format in
+        // 2. Suche nach dem Format, das die höchste FPS unterstützt (Sicherheitsmarge)
+        // Wir sortieren nach der maximalen Framerate, die das Format bietet
+        let sortedByFPS = matchingDimensions.sorted { f1, f2 in
+            let max1 = f1.videoSupportedFrameRateRanges.map { $0.maxFrameRate }.max() ?? 0
+            let max2 = f2.videoSupportedFrameRateRanges.map { $0.maxFrameRate }.max() ?? 0
+            return max1 > max2
+        }
+
+        // 3. Nimm das erste Format, das unsere Ziel-FPS unterstützt
+        let bestMatch = sortedByFPS.first { format in
             format.videoSupportedFrameRateRanges.contains { range in
                 range.minFrameRate <= targetFPS && range.maxFrameRate >= targetFPS
             }
         }
 
-        return bestMatch ?? matchingDimensions.first ?? device.formats.last
+        return bestMatch ?? sortedByFPS.first ?? device.formats.last
     }
 }
 

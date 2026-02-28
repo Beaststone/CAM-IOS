@@ -86,39 +86,42 @@ final class H264Encoder {
         // 3. Low Latency: Keine B-Frames
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AllowFrameReordering, value: kCFBooleanFalse)
         
-        // 4. High Profile: Beste Qualität für hohe Auflösungen
+        // 4. High Profile & Level 5.2 für 4K/60fps Support
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ProfileLevel, value: kVTProfileLevel_H264_High_AutoLevel)
+        
+        // NEU: Sofortige Ausgabe (Keine Verzögerung im Encoder-Buffer)
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxFrameDelayCount, value: 0 as CFNumber)
 
         // 5. Dynamische Bitratenkontrolle anhand des Netzwerks (USB vs WLAN)
         let bitRate: Int
         if isUSBMode {
-            // Kabelgebunden: Keine Limitierungen!
+            // Kabelgebunden: Hohe Bitrate für 60fps
             if config.width >= 3840 { 
-                bitRate = 40_000_000 // 40 Mbps für 4K (Crystal Clear)
+                bitRate = 60_000_000 // 60 Mbps für 4K60 (Enorme Qualität)
             } else if config.width >= 2560 { 
-                bitRate = 25_000_000 // 25 Mbps für 2K
+                bitRate = 35_000_000 // 35 Mbps für 2K
             } else { 
-                bitRate = 15_000_000 // 15 Mbps für 1080p
+                bitRate = 20_000_000 // 20 Mbps für 1080p
             }
         } else {
-            // WLAN: UDP verzeiht keinen Jitter, wir müssen sehr konservativ sein
+            // WLAN: UDP verzeiht keinen Jitter
             if config.width >= 3840 { 
-                bitRate = 12_000_000 // 12 Mbps für 4K (Stark komprimiert aber ruckelfrei)
+                bitRate = 12_000_000 
             } else if config.width >= 2560 { 
-                bitRate = 8_000_000  // 8 Mbps für 2K
+                bitRate = 8_000_000  
             } else { 
-                bitRate = 5_000_000  // 5 Mbps für 1080p
+                bitRate = 5_000_000  
             }
         }
         
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: bitRate as CFNumber)
 
-        // 6. Daten-Limit (Sicherheitsnetz)
+        // 6. Daten-Limit
         let limit = [bitRate / 8, 1] as CFArray
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_DataRateLimits, value: limit)
 
-        // 7. GOP-Size (Keyframe-Intervall)
-        let keyFrameInterval = config.fps * 3
+        // 7. GOP-Size (Keyframe-Intervall: Alle 2 Sek für Stabilität)
+        let keyFrameInterval = config.fps * 2
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: NSNumber(value: keyFrameInterval))
 
         let prepareStatus = VTCompressionSessionPrepareToEncodeFrames(session)
