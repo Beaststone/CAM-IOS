@@ -165,7 +165,10 @@ final class CameraSessionManager: NSObject {
     }
 
     private func bestFormat(for device: AVCaptureDevice, config: StreamConfig) -> AVCaptureDevice.Format? {
-        let reqMin = Int32(min(config.width, config.height))
+        let reqW = Int32(config.width)
+        let reqH = Int32(config.height)
+        let reqMin = min(reqW, reqH)
+        let targetAspectRatio = Double(max(reqW, reqH)) / Double(min(reqW, reqH))
         let targetFPS = Float64(config.fps)
 
         // 1. Suche Formate, die die Ziel-FPS unterstützen
@@ -175,18 +178,28 @@ final class CameraSessionManager: NSObject {
             }
         }
 
-        // 2. Suche in diesen Formaten nach der besten Auflösung (am nächsten an reqMin)
-        // Wir sortieren so, dass exakte Treffer oder das kleinste Format >= reqMin vorne stehen
+        // 2. Suche in diesen Formaten nach der besten Auflösung UND dem besten Seitenverhältnis
         let formatsToSearch = fpsSupported.isEmpty ? device.formats : fpsSupported
         
-        let sortedByRes = formatsToSearch.sorted { f1, f2 in
+        let sortedByMatch = formatsToSearch.sorted { f1, f2 in
             let dims1 = CMVideoFormatDescriptionGetDimensions(f1.formatDescription)
             let dims2 = CMVideoFormatDescriptionGetDimensions(f2.formatDescription)
             
             let w1 = min(dims1.width, dims1.height)
             let w2 = min(dims2.width, dims2.height)
+            let ar1 = Double(max(dims1.width, dims1.height)) / Double(min(dims1.width, dims1.height))
+            let ar2 = Double(max(dims2.width, dims2.height)) / Double(min(dims2.width, dims2.height))
             
-            // Bevorzuge Formate, die mindestens die geforderte Pixelmenge haben
+            let arDiff1 = abs(ar1 - targetAspectRatio)
+            let arDiff2 = abs(ar2 - targetAspectRatio)
+            
+            // Priorität 1: Seitenverhältnis (WICHTIG gegen Stretching)
+            // Wir lassen eine kleine Toleranz (0.05), falls die Auflösung viel besser passt
+            if abs(arDiff1 - arDiff2) > 0.05 {
+                return arDiff1 < arDiff2
+            }
+            
+            // Priorität 2: Auflösung (Mindestgröße erfüllen)
             let meetsReq1 = w1 >= reqMin
             let meetsReq2 = w2 >= reqMin
             
@@ -197,10 +210,10 @@ final class CameraSessionManager: NSObject {
             return abs(w1 - reqMin) < abs(w2 - reqMin)
         }
 
-        let best = sortedByRes.first ?? device.formats.last
+        let best = sortedByMatch.first ?? device.formats.last
         if let b = best {
             let dims = CMVideoFormatDescriptionGetDimensions(b.formatDescription)
-            print("[CameraSessionManager] Selected format: \(dims.width)x\(dims.height)")
+            print("[CameraSessionManager] Selected format: \(dims.width)x\(dims.height) (Target: \(reqW)x\(reqH))")
         }
         return best
     }
