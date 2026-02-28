@@ -27,12 +27,21 @@ final class H264Encoder {
     }
 
     func update(config: StreamConfig) {
-        print("[H264Encoder] Updating config: \(config.width)x\(config.height) @ \(config.fps)fps")
-        self.config = config
-        setupSession()
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            print("[H264Encoder] Updating config: \(config.width)x\(config.height) @ \(config.fps)fps")
+            self.config = config
+            self.setupSession()
+        }
     }
 
     func stop() {
+        queue.async { [weak self] in
+            self?.internalStop()
+        }
+    }
+
+    private func internalStop() {
         if let session = compressionSession {
             VTCompressionSessionCompleteFrames(session, untilPresentationTimeStamp: .positiveInfinity)
             VTCompressionSessionInvalidate(session)
@@ -42,7 +51,7 @@ final class H264Encoder {
     }
 
     private func setupSession() {
-        stop()
+        internalStop()
 
         let width = Int32(config.width)
         let height = Int32(config.height)

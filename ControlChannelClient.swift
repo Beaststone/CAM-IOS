@@ -85,15 +85,19 @@ final class ControlChannelClient {
     private func handleNewTCPConnection(_ connection: NWConnection) {
         tcpClientConnection?.cancel()
         
+        // Sofort als verbunden markieren, sobald der PC den TCP-Handshake macht
         connection.stateUpdateHandler = { [weak self] state in
-            switch state {
-            case .ready:
-                self?.connectionStatePublisher.send(.connected(pcName: "USB-PC"))
-                self?.receiveLoop()
-            case .failed, .cancelled:
-                self?.connectionStatePublisher.send(.idle)
-            default:
-                break
+            DispatchQueue.main.async {
+                switch state {
+                case .ready:
+                    print("[ControlChannelClient] USB Connection ready")
+                    self?.connectionStatePublisher.send(.connected(pcName: "USB-PC"))
+                    self?.receiveLoop()
+                case .failed, .cancelled:
+                    self?.connectionStatePublisher.send(.idle)
+                default:
+                    break
+                }
             }
         }
         
