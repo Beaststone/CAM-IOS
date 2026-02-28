@@ -37,9 +37,10 @@ final class CameraSessionManager: NSObject {
             isConfigured = true
         }
         if !session.isRunning {
-            DispatchQueue.main.async { [weak self] in
+            // Session-Start im Hintergrund, um UI-Lags zu vermeiden
+            queue.async { [weak self] in
                 self?.session.startRunning()
-                print("[CameraSessionManager] Session.startRunning() called, now running: \(self?.session.isRunning ?? false)")
+                print("[CameraSessionManager] Session running: \(self?.session.isRunning ?? false)")
             }
         }
     }
@@ -52,27 +53,54 @@ final class CameraSessionManager: NSObject {
 
     func switchCamera() {
         currentDevicePosition = (currentDevicePosition == .back) ? .front : .back
-        configureSession()
+        reconfigure()
     }
 
     func apply(config: StreamConfig) {
         session.beginConfiguration()
-        if config.width >= 1920 {
+        
+        // --- AUFLÖSUNGS-PRESETS INKL. 4K & 2K ---
+        if config.width >= 3840 {
+            if session.canSetSessionPreset(.hd4K3840x2160) {
+                session.sessionPreset = .hd4K3840x2160
+            } else {
+                session.sessionPreset = .hd1920x1080 // Fallback
+            }
+        } else if config.width >= 2560 {
+            // Für 2K gibt es kein direktes Preset, wir nutzen High oder 4K 
+            // Das Format-Tuning unten erledigt den Rest
+            if session.canSetSessionPreset(.hd4K3840x2160) {
+                session.sessionPreset = .hd4K3840x2160
+            } else {
+                session.sessionPreset = .hd1920x1080
+            }
+        } else if config.width >= 1920 {
             session.sessionPreset = .hd1920x1080
         } else if config.width >= 1280 {
             session.sessionPreset = .hd1280x720
         } else {
             session.sessionPreset = .vga640x480
         }
+        
         session.commitConfiguration()
 
+        // --- PRÄZISES FORMAT- & FPS-TUNING ---
         if let device = currentDevice(), let format = bestFormat(for: device, config: config) {
-            try? device.lockForConfiguration()
-            device.activeFormat = format
-            let duration = CMTime(value: 1, timescale: CMTimeScale(config.fps))
-            device.activeVideoMinFrameDuration = duration
-            device.activeVideoMaxFrameDuration = duration
-            device.unlockForConfiguration()
+            do {
+                try device.lockForConfiguration()
+                
+                // Setzt das exakte Format (wichtig für 2K/4K/60FPS)
+                device.activeFormat = format
+                
+                let duration = CMTime(value: 1, timescale: CMTimeScale(config.fps))
+                device.activeVideoMinFrameDuration = duration
+                device.activeVideoMaxFrameDuration = duration
+                
+                device.unlockForConfiguration()
+                print("[CameraSessionManager] Applied: \(config.width)x\(config.height) @ \(config.fps) FPS")
+            } catch {
+                print("[CameraSessionManager] Configuration Error: \(error)")
+            }
         }
     }
 
@@ -81,7 +109,6 @@ final class CameraSessionManager: NSObject {
         isConfigured = true
     }
 
-    // --- GEÄNDERTE KONFIGURATION ---
     private func configureSession() {
         session.beginConfiguration()
         session.inputs.forEach { session.removeInput($0) }
@@ -96,6 +123,8 @@ final class CameraSessionManager: NSObject {
 
         if session.outputs.isEmpty {
             videoOutput.setSampleBufferDelegate(self, queue: queue)
+            // Wichtig für Performance: Frames verwerfen, wenn der Encoder zu langsam ist
+            videoOutput.alwaysDiscardsLateVideoFrames = true
             videoOutput.videoSettings = [
                 kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
             ]
@@ -104,56 +133,55 @@ final class CameraSessionManager: NSObject {
             }
         }
 
-        // Setzt die Orientierung beim ersten Mal konfigurieren
         updateVideoOrientation()
-
         session.commitConfiguration()
     }
 
-    // --- NEUE FUNKTION FÜR DYNAMISCHE ORIENTIERUNG ---
     func updateVideoOrientation() {
-        // Wir brauchen die Orientierung der WindowScene für das UI-Layout
         let scenes = UIApplication.shared.connectedScenes
         let windowScene = scenes.first as? UIWindowScene
         let orientation = windowScene?.interfaceOrientation ?? .portrait
 
         if let connection = videoOutput.connection(with: .video),
            connection.isVideoOrientationSupported {
-            
             switch orientation {
-            case .portrait:
-                connection.videoOrientation = .portrait
-            case .landscapeLeft:
-                connection.videoOrientation = .landscapeLeft
-            case .landscapeRight:
-                connection.videoOrientation = .landscapeRight
-            case .portraitUpsideDown:
-                connection.videoOrientation = .portraitUpsideDown
-            @unknown default:
-                connection.videoOrientation = .portrait
+            case .portrait: connection.videoOrientation = .portrait
+            case .landscapeLeft: connection.videoOrientation = .landscapeLeft
+            case .landscapeRight: connection.videoOrientation = .landscapeRight
+            case .portraitUpsideDown: connection.videoOrientation = .portraitUpsideDown
+            @unknown default: connection.videoOrientation = .portrait
             }
-            print("[CameraSessionManager] Video Data Orientation updated to: \(orientation.rawValue)")
         }
     }
 
     private func currentDevice() -> AVCaptureDevice? {
-        AVCaptureDevice.default(.builtInWideAngleCamera,
-                                for: .video,
-                                position: currentDevicePosition)
+        AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: currentDevicePosition)
     }
 
     private func bestFormat(for device: AVCaptureDevice, config: StreamConfig) -> AVCaptureDevice.Format? {
-        device.formats
-            .filter { $0.formatDescription.dimensions.width >= config.width }
-            .sorted { $0.formatDescription.dimensions.width < $1.formatDescription.dimensions.width }
-            .first
+        let targetWidth = Int32(config.width)
+        let targetHeight = Int32(config.height)
+        let targetFPS = Float64(config.fps)
+
+        // Filtert nach Auflösung
+        let matchingDimensions = device.formats.filter { format in
+            let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+            return dims.width == targetWidth && dims.height == targetHeight
+        }
+
+        // Sucht FPS-Match
+        let bestMatch = matchingDimensions.first { format in
+            format.videoSupportedFrameRateRanges.contains { range in
+                range.minFrameRate <= targetFPS && range.maxFrameRate >= targetFPS
+            }
+        }
+
+        return bestMatch ?? matchingDimensions.first ?? device.formats.last
     }
 }
 
 extension CameraSessionManager: AVCaptureVideoDataOutputSampleBufferDelegate {
-    func captureOutput(_ output: AVCaptureOutput,
-                       didOutput sampleBuffer: CMSampleBuffer,
-                       from connection: AVCaptureConnection) {
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         sampleBufferPublisher.send(sampleBuffer)
     }
 }
