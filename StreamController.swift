@@ -55,10 +55,11 @@ final class StreamController: ObservableObject {
             
             print("[StreamController] Mode: \(mode). Connecting to PC at \(pcIP):5000 and \(pcIP):5960")
             
-            self.encoder.isUSBMode = (mode == .usb)
+            let isUSB = (mode == .usb)
+            self.encoder.isUSBMode = isUSB
 
-            self.videoClient.connect(to: pcIP, port: 5000)
-            self.controlClient.connect(to: pcIP, port: 5960)
+            self.videoClient.connect(to: pcIP, port: 5000, isUSB: isUSB)
+            self.controlClient.connect(to: pcIP, port: 5960, isUSB: isUSB)
         }
     }
 
