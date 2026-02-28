@@ -145,6 +145,22 @@ final class StreamController: ObservableObject {
                 self?.handleConnectionState(state)
             }
             .store(in: &cancellables)
+
+        controlClient.keyframeRequestPublisher
+            .sink { [weak self] in
+                self?.encoder.forceKeyframe()
+            }
+            .store(in: &cancellables)
+
+        controlClient.bitrateRequestPublisher
+            .sink { [weak self] newBitrate in
+                guard let self = self, var config = self.lastReceivedConfig else { return }
+                print("[StreamController] Applying new bitrate from Remote: \(newBitrate)")
+                config.bitrate = newBitrate
+                self.lastReceivedConfig = config
+                self.encoder.update(config: config)
+            }
+            .store(in: &cancellables)
     }
 
     private func handleConnectionState(_ state: ControlConnectionState) {

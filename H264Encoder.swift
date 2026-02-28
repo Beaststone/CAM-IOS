@@ -23,6 +23,9 @@ final class H264Encoder {
 
     // Cache für Parameter Sets (SPS, PPS, VPS) um sie jedem Frame voranzustellen (Annex-B)
     fileprivate var cachedParameterSets: Data = Data()
+    
+    // Flag um einen sofortigen Keyframe (IDR) zu erzwingen (WebRTC-Style Feedback)
+    private var shouldForceKeyframe: Bool = false
 
     init() {
         print("[H264Encoder] Init")
@@ -35,6 +38,13 @@ final class H264Encoder {
             print("[H264Encoder] Updating config: \(config.width)x\(config.height) @ \(config.fps)fps")
             self.config = config
             self.setupSession()
+        }
+    }
+
+    /// Erzwingt, dass das nächste Bild ein Keyframe wird.
+    func forceKeyframe() {
+        queue.async { [weak self] in
+            self?.shouldForceKeyframe = true
         }
     }
 
@@ -97,9 +107,10 @@ final class H264Encoder {
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxFrameDelayCount, value: 0 as CFNumber)
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: NSNumber(value: config.fps))
         
-        // 2. IDR Frames alle 2 Sekunden für Stabilität (WLAN-Recovery)
-        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: NSNumber(value: config.fps * 2)) 
-        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, value: 2.0 as CFNumber)
+        // 2. IDR Frames alle 1 Sekunde für garantierte Erholung (WebRTC-Style)
+        // Bei 30 FPS = alle 30 Frames, bei 60 FPS = alle 60 Frames.
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: NSNumber(value: config.fps)) 
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, value: 1.0 as CFNumber)
         
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AllowFrameReordering, value: kCFBooleanFalse)
         
@@ -153,11 +164,18 @@ final class H264Encoder {
         let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         var flags = VTEncodeInfoFlags()
 
+        var frameProperties: [CFString: Any] = [:]
+        if shouldForceKeyframe {
+            print("[H264Encoder] FORCING KEYFRAME (Feedback Loop Request)")
+            frameProperties[kVTEncodeFrameOptionKey_ForceKeyFrame] = kCFBooleanTrue
+            shouldForceKeyframe = false
+        }
+
         let status = VTCompressionSessionEncodeFrame(session,
                                                     imageBuffer: imageBuffer,
                                                     presentationTimeStamp: pts,
                                                     duration: .invalid,
-                                                    frameProperties: nil,
+                                                    frameProperties: frameProperties as CFDictionary,
                                                     sourceFrameRefcon: nil,
                                                     infoFlagsOut: &flags)
 

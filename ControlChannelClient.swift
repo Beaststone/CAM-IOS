@@ -18,6 +18,8 @@ final class ControlChannelClient {
     private var currentPort: UInt16?
 
     let configPublisher = PassthroughSubject<StreamConfig, Never>()
+    let keyframeRequestPublisher = PassthroughSubject<Void, Never>()
+    let bitrateRequestPublisher = PassthroughSubject<Int, Never>()
     let connectionStatePublisher = PassthroughSubject<ControlConnectionState, Never>()
 
     func connect(to host: String, port: UInt16, isUSB: Bool) {
@@ -146,6 +148,12 @@ final class ControlChannelClient {
             let useHEVC = json["useHEVC"] as? Bool
             let cfg = StreamConfig(width: width, height: height, fps: fps, useHEVC: useHEVC)
             configPublisher.send(cfg)
+        } else if type == "request_keyframe" {
+            print("[ControlChannelClient] Remote requested Keyframe (Feedback Loop)")
+            keyframeRequestPublisher.send()
+        } else if type == "set_bitrate", let value = json["value"] as? Int {
+            print("[ControlChannelClient] Remote requested Bitrate change: \(value)")
+            bitrateRequestPublisher.send(value)
         }
     }
 

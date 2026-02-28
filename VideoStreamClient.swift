@@ -10,6 +10,9 @@ final class VideoStreamClient {
 
     private var isUSBMode = false
     private var currentPort: UInt16?
+    
+    // Sequenznummer für UDP-Paketverlust-Erkennung (Phase 3)
+    private var sequenceNumber: UInt16 = 0
 
     func connect(to host: String, port: UInt16, isUSB: Bool) {
         if self.isUSBMode == isUSB && self.currentPort == port && (tcpListener != nil || udpConnection != nil) {
@@ -155,12 +158,19 @@ final class VideoStreamClient {
                 naluPacket.append(frameData[offset..<naluEnd])
                 
                 if !naluPacket.isEmpty {
+                    // SEQUENCE NUMBER: Wir hängen eine 2-Byte Sequenznummer an (WLAN-Paketverlust-Check)
+                    var packetWithSeq = Data()
+                    let seq = sequenceNumber.bigEndian
+                    withUnsafeBytes(of: seq) { packetWithSeq.append(contentsOf: $0) }
+                    packetWithSeq.append(naluPacket)
+                    
                     pendingSends += 1
-                    conn.send(content: naluPacket, completion: .contentProcessed { [weak self] error in
+                    conn.send(content: packetWithSeq, completion: .contentProcessed { [weak self] error in
                         self?.queue.async {
                             self?.pendingSends -= 1
                         }
                     })
+                    sequenceNumber &+= 1 // Überlauf sicher
                 }
                 
                 offset = naluEnd + 4
