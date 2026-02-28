@@ -46,6 +46,7 @@ final class VideoStreamClient {
         do {
             let nwPort = NWEndpoint.Port(rawValue: port)!
             let params = NWParameters.tcp
+            params.noDelay = true // Sofortiges Senden ohne TCP-Pufferung (Nagle Off)
             params.allowLocalEndpointReuse = true
             // params.requiredInterfaceType = .loopback // Entfernt für maximale Kompatibilität falls usbmuxd anders routet
             
