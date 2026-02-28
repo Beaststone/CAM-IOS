@@ -81,9 +81,26 @@ final class StreamController: ObservableObject {
     }
 
     func sendConfig(_ config: StreamConfig) {
-        controlClient.sendConfig(config)
-        cameraManager.apply(config: config)
-        encoder.update(config: config)
+        var adjustedConfig = config
+        
+        // ORIENTATION FIX: Wenn das Handy hochkant gehalten wird, müssen wir Breite und Höhe tauschen
+        let scenes = UIApplication.shared.connectedScenes
+        let windowScene = scenes.first as? UIWindowScene
+        let orientation = windowScene?.interfaceOrientation ?? .portrait
+        
+        if orientation.isPortrait && config.width > config.height {
+            adjustedConfig.width = config.height
+            adjustedConfig.height = config.width
+            print("[StreamController] Porträt-Modus erkannt: Tausche Auflösung zu \(adjustedConfig.width)x\(adjustedConfig.height)")
+        } else if orientation.isLandscape && config.width < config.height {
+            adjustedConfig.width = config.height
+            adjustedConfig.height = config.width
+            print("[StreamController] Querformat erkannt: Tausche Auflösung zu \(adjustedConfig.width)x\(adjustedConfig.height)")
+        }
+
+        controlClient.sendConfig(adjustedConfig)
+        cameraManager.apply(config: adjustedConfig)
+        encoder.update(config: adjustedConfig)
         
         // Auch bei neuen Konfigurationen die Orientierung prüfen
         cameraManager.updateVideoOrientation()
