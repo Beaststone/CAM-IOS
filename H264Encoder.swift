@@ -118,10 +118,10 @@ final class H264Encoder {
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxFrameDelayCount, value: 0 as CFNumber)
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: NSNumber(value: config.fps))
         
-        // 2. IDR Frames alle 0.25 - 0.5 Sekunde für garantierte Erholung (Phase 5.1)
-        // Wir fixieren das auf 15 Frames, um der RTX 2060 schnellere Sync-Punkte zu bieten.
-        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: 15 as CFNumber) 
-        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, value: 0.25 as CFNumber)
+        // 2. IDR Frames alle 1 Sekunde für 60FPS Stabilität (Phase 15.1)
+        // Wir erhöhen das Intervall, um Bitraten-Spitzen bei 4K zu glätten.
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: 60 as CFNumber) 
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, value: 1.0 as CFNumber)
         
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AllowFrameReordering, value: kCFBooleanFalse)
         
@@ -136,18 +136,18 @@ final class H264Encoder {
         if let preferredBitrate = config.bitrate {
             bitRate = preferredBitrate
         } else if isUSBMode {
-            // USB-Optimiert: 30 Mbps für 4K (Phasen 8: Maximale Bildrate)
-            bitRate = config.width >= 3840 ? 30_000_000 : (config.width >= 2560 ? 15_000_000 : 10_000_000)
+            // USB-Optimiert: 60 Mbps für 4K (Phase 15.1: Erhöht für echte 60 FPS)
+            bitRate = config.width >= 3840 ? 60_000_000 : (config.width >= 2560 ? 30_000_000 : 15_000_000)
         } else {
-            // WLAN-Optimiert: 4K auf 12Mbps drosseln um Stau (graue Bilder) zu vermeiden.
+            // WLAN-Optimiert
             bitRate = config.width >= 3840 ? 12_000_000 : (config.width >= 2560 ? 9_000_000 : 5_000_000)
         }
         
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: bitRate as CFNumber)
         
-        // PHASE 15: Wir erlauben 50% Spitzenlast (Data Rate Limits)
-        // Das verhindert, dass der Encoder bei komplexen 4K-Szenen die FPS drosselt.
-        let dataRateLimits: [Int] = [bitRate * 3 / 2 / 8, 1] // bytes per second, duration in seconds
+        // PHASE 15.1: Wir erlauben 100% Spitzenlast (Data Rate Limits)
+        // Bei 4K benötigen komplexe Frames viel Platz; die Drosselung war der 40-FPS Flaschenhals.
+        let dataRateLimits: [Int] = [bitRate * 2 / 8, 1] 
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_DataRateLimits, value: dataRateLimits as CFArray)
 
         // HARDWARE SLICING: Das ist der Key für WLAN-Stabilität!
@@ -185,7 +185,8 @@ final class H264Encoder {
 
         var frameProperties: [CFString: Any] = [:]
         if shouldForceKeyframe {
-            print("[H264Encoder] FORCING KEYFRAME (Feedback Loop Request)")
+            // PHASE 16: Sofortiges IDR-Frame erzwingen
+            print("[H264Encoder] !!! FORCING KEYFRAME NOW !!!")
             frameProperties[kVTEncodeFrameOptionKey_ForceKeyFrame] = kCFBooleanTrue
             shouldForceKeyframe = false
         }

@@ -92,22 +92,18 @@ final class CameraSessionManager: NSObject {
                     let maxDuration = range.maxFrameDuration
                     let safeDuration = CMTimeClampToRange(targetDuration, range: CMTimeRange(start: minDuration, end: maxDuration))
                     
-                    device.activeVideoMinFrameDuration = safeDuration
-                    device.activeVideoMaxFrameDuration = safeDuration
-                    print("[CameraSessionManager] Applied Hardware-Validated Duration: \(safeDuration.seconds)s (FPS: \(actualFPS))")
-                } else {
-                    // Fallback: Nur setzen wenn wir sicher sind
-                    device.activeVideoMinFrameDuration = targetDuration
-                    device.activeVideoMaxFrameDuration = targetDuration
-                }
+                // PHASE 16: Hard-Lock auf 60 FPS (Auto-FPS komplett deaktivieren)
+                // Verhindert, dass das iPhone bei wenig Licht auf 24/30 FPS drosselt.
+                if device.isSmoothAutoFocusSupported { device.isSmoothAutoFocusEnabled = false }
                 
+                device.activeVideoMinFrameDuration = targetDuration
+                device.activeVideoMaxFrameDuration = targetDuration
+                
+                // Wir setzen die Belichtung auf Continuous, aber fixieren die Rate
                 if device.isExposureModeSupported(.continuousAutoExposure) {
                     device.exposureMode = .continuousAutoExposure
                 }
                 
-                // Falls wir doch manuell eingreifen wollen (Thermal Fallback etc.):
-                // print("[CameraSessionManager] Ready for 60 FPS (Auto-Exposure)")
-
                 device.unlockForConfiguration()
                 print("[CameraSessionManager] Applied: \(config.width)x\(config.height) @ \(actualFPS) FPS (Target: \(config.fps))")
             } catch {
