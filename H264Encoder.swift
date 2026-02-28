@@ -3,16 +3,14 @@ import AVFoundation
 import VideoToolbox
 
 /// Hardware-H.264-Encoder für iPhone-Kamera.
-/// - Nimmt `CMSampleBuffer` Frames entgegen und liefert Annex-B H.264 NALUs (inkl. SPS/PPS bei Keyframes).
+/// - Nimmt `CMSampleBuffer` Frames entgegen und liefert Annex-B H.264 NALUs.
+/// Optimiert für 4K-Streaming und maximale Stabilität (Iriun-Style).
 final class H264Encoder {
     let queue = DispatchQueue(label: "h264.encoder.queue")
     private var compressionSession: VTCompressionSession?
     private var config: StreamConfig = .defaultConfig
 
     /// Wird bei jedem encodierten Frame aufgerufen.
-    /// - Parameters:
-    ///   - data: Annex-B H.264 Bytestrom (ggf. mehrere NALUs).
-    ///   - isKeyframe: true, wenn der Frame ein IDR-Keyframe ist.
     var onEncoded: ((Data, Bool) -> Void)?
 
     init() {
@@ -43,15 +41,15 @@ final class H264Encoder {
 
         var session: VTCompressionSession?
         let status = VTCompressionSessionCreate(allocator: kCFAllocatorDefault,
-                                   width: width,
-                                   height: height,
-                                   codecType: kCMVideoCodecType_H264,
-                                   encoderSpecification: nil,
-                                   imageBufferAttributes: nil,
-                                   compressedDataAllocator: nil,
-                                   outputCallback: compressionOutputCallback,
-                                   refcon: Unmanaged.passUnretained(self).toOpaque(),
-                                   compressionSessionOut: &session)
+                                               width: width,
+                                               height: height,
+                                               codecType: kCMVideoCodecType_H264,
+                                               encoderSpecification: nil,
+                                               imageBufferAttributes: nil,
+                                               compressedDataAllocator: nil,
+                                               outputCallback: compressionOutputCallback,
+                                               refcon: Unmanaged.passUnretained(self).toOpaque(),
+                                               compressionSessionOut: &session)
 
         guard status == noErr, let session = session else {
             print("[H264Encoder] Failed to create session: \(status)")
@@ -60,31 +58,38 @@ final class H264Encoder {
 
         compressionSession = session
 
-        guard let session = compressionSession else { return }
+        // --- IRIUN-LEVEL TUNING FÜR 4K STABILITÄT ---
+        
+        // 1. Echtzeit-Modus: Minimiert Verzögerung (sehr wichtig für Webcams)
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_RealTime, value: kCFBooleanTrue)
+        
+        // 2. Erwartete Framerate setzen
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: NSNumber(value: config.fps))
+        
+        // 3. Low Latency: Verhindert das Umordnen von Frames (keine B-Frames)
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AllowFrameReordering, value: kCFBooleanFalse)
+        
+        // 4. High Profile: Ermöglicht bessere Kompression bei 4K Auflösung
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ProfileLevel, value: kVTProfileLevel_H264_High_AutoLevel)
 
-        // Realtime, Hardware-Encoding
-        VTSessionSetProperty(session,
-                             key: kVTCompressionPropertyKey_RealTime,
-                             value: kCFBooleanTrue)
-        VTSessionSetProperty(session,
-                             key: kVTCompressionPropertyKey_ExpectedFrameRate,
-                             value: NSNumber(value: config.fps))
-        VTSessionSetProperty(session,
-                             key: kVTCompressionPropertyKey_AllowFrameReordering,
-                             value: kCFBooleanFalse)
-        VTSessionSetProperty(session,
-                             key: kVTCompressionPropertyKey_ProfileLevel,
-                             value: kVTProfileLevel_H264_High_AutoLevel)
+        // 5. Aggressive Bitratenkontrolle: 
+        // 15 Mbps ist ein sehr guter Wert für 4K über WLAN (scharf aber stabil).
+        let bitRate = 15_000_000 
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: bitRate as CFNumber)
 
-        // Keyframe-Intervall (z.B. alle 2 Sekunden)
-        let keyFrameInterval = config.fps * 2
-        VTSessionSetProperty(session,
-                             key: kVTCompressionPropertyKey_MaxKeyFrameInterval,
-                             value: NSNumber(value: keyFrameInterval))
+        // 6. Daten-Limit (Das Sicherheitsnetz gegen Handy-Abstürze):
+        // Verhindert, dass kurzzeitig zu viele Daten den RAM oder das WLAN fluten.
+        let limit = [bitRate / 8, 1] as CFArray
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_DataRateLimits, value: limit)
+
+        // 7. GOP-Size (Keyframe-Intervall): 
+        // Nur alle 3 Sekunden ein schweres Vollbild spart massiv Bandbreite.
+        let keyFrameInterval = config.fps * 3
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: NSNumber(value: keyFrameInterval))
 
         let prepareStatus = VTCompressionSessionPrepareToEncodeFrames(session)
         if prepareStatus == noErr {
-            print("[H264Encoder] Session ready: \(width)x\(height) @ \(config.fps)fps")
+            print("[H264Encoder] Session ready für 4K: \(width)x\(height) @ \(config.fps)fps")
         } else {
             print("[H264Encoder] Prepare failed: \(prepareStatus)")
         }
@@ -93,7 +98,6 @@ final class H264Encoder {
     func encode(sampleBuffer: CMSampleBuffer) {
         guard let session = compressionSession,
               let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
-            print("[H264Encoder] Missing session or imageBuffer")
             return
         }
 
@@ -101,12 +105,12 @@ final class H264Encoder {
         var flags = VTEncodeInfoFlags()
 
         let status = VTCompressionSessionEncodeFrame(session,
-                                        imageBuffer: imageBuffer,
-                                        presentationTimeStamp: pts,
-                                        duration: .invalid,
-                                        frameProperties: nil,
-                                        sourceFrameRefcon: nil,
-                                        infoFlagsOut: &flags)
+                                                    imageBuffer: imageBuffer,
+                                                    presentationTimeStamp: pts,
+                                                    duration: .invalid,
+                                                    frameProperties: nil,
+                                                    sourceFrameRefcon: nil,
+                                                    infoFlagsOut: &flags)
 
         if status != noErr {
             print("[H264Encoder] Encode failed: \(status)")
@@ -123,103 +127,65 @@ private func compressionOutputCallback(outputCallbackRefCon: UnsafeMutableRawPoi
                                        sampleBuffer: CMSampleBuffer?) {
     guard status == noErr,
           let sampleBuffer = sampleBuffer,
-          CMSampleBufferDataIsReady(sampleBuffer),
-          let attachmentsArray = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false) as? [[CFString: Any]],
-          let attachment = attachmentsArray.first else {
-        print("[H264Encoder] Callback error: status=\(status), sampleBuffer=\(sampleBuffer != nil ? "ready" : "nil")")
+          CMSampleBufferDataIsReady(sampleBuffer) else {
         return
     }
 
-    guard let outputCallbackRefCon else { return }
+    guard let outputCallbackRefCon = outputCallbackRefCon else { return }
     let encoder = Unmanaged<H264Encoder>.fromOpaque(outputCallbackRefCon).takeUnretainedValue()
 
-    // Keyframe?
-    let notSync = (attachment[kCMSampleAttachmentKey_NotSync] as? Bool) ?? false
-    let isKeyframe = !notSync
+    // Prüfen ob es ein Keyframe ist
+    let isKeyframe: Bool
+    if let attachmentsArray = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false) as? [[CFString: Any]],
+       let attachment = attachmentsArray.first {
+        let notSync = (attachment[kCMSampleAttachmentKey_NotSync] as? Bool) ?? false
+        isKeyframe = !notSync
+    } else {
+        isKeyframe = false
+    }
 
     guard let formatDesc = CMSampleBufferGetFormatDescription(sampleBuffer) else { return }
-
     var nalData = Data()
 
     // SPS/PPS bei Keyframes voranstellen
     if isKeyframe {
-        var spsCount: Int = 0
-        var spsPointer: UnsafePointer<UInt8>?
-        var spsSize: Int = 0
-        var ppsCount: Int = 0
-        var ppsPointer: UnsafePointer<UInt8>?
-        var ppsSize: Int = 0
-
-        CMVideoFormatDescriptionGetH264ParameterSetAtIndex(formatDesc,
-                                                           parameterSetIndex: 0,
-                                                           parameterSetPointerOut: &spsPointer,
-                                                           parameterSetSizeOut: &spsSize,
-                                                           parameterSetCountOut: &spsCount,
-                                                           nalUnitHeaderLengthOut: nil)
-
-        CMVideoFormatDescriptionGetH264ParameterSetAtIndex(formatDesc,
-                                                           parameterSetIndex: 1,
-                                                           parameterSetPointerOut: &ppsPointer,
-                                                           parameterSetSizeOut: &ppsSize,
-                                                           parameterSetCountOut: &ppsCount,
-                                                           nalUnitHeaderLengthOut: nil)
-
-        let startCode: [UInt8] = [0, 0, 0, 1]
-        if let spsPtr = spsPointer {
-            nalData.append(startCode, count: 4)
-            nalData.append(spsPtr, count: spsSize)
-            print("[H264Encoder] SPS added: \(spsSize) bytes")
-        }
-        if let ppsPtr = ppsPointer {
-            nalData.append(startCode, count: 4)
-            nalData.append(ppsPtr, count: ppsSize)
-            print("[H264Encoder] PPS added: \(ppsSize) bytes")
+        var parameterSetCount = 0
+        CMVideoFormatDescriptionGetH264ParameterSetAtIndex(formatDesc, parameterSetIndex: 0, parameterSetPointerOut: nil, parameterSetSizeOut: nil, parameterSetCountOut: &parameterSetCount, nalUnitHeaderLengthOut: nil)
+        
+        for i in 0..<parameterSetCount {
+            var ptr: UnsafePointer<UInt8>?
+            var size = 0
+            CMVideoFormatDescriptionGetH264ParameterSetAtIndex(formatDesc, parameterSetIndex: i, parameterSetPointerOut: &ptr, parameterSetSizeOut: &size, parameterSetCountOut: nil, nalUnitHeaderLengthOut: nil)
+            if let p = ptr {
+                nalData.append(contentsOf: [0, 0, 0, 1]) // Start Code
+                nalData.append(p, count: size)
+            }
         }
     }
 
-    // Encodierte NALUs aus dem BlockBuffer lesen (Länge + NALU)
-    guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { 
-        print("[H264Encoder] No blockBuffer")
-        return 
-    }
-
-    var totalLength: Int = 0
+    // NALUs extrahieren
+    guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { return }
+    var totalLength = 0
     var dataPointer: UnsafeMutablePointer<Int8>?
-    let status = CMBlockBufferGetDataPointer(blockBuffer,
-                                             atOffset: 0,
-                                             lengthAtOffsetOut: nil,
-                                             totalLengthOut: &totalLength,
-                                             dataPointerOut: &dataPointer)
-    guard status == kCMBlockBufferNoErr, let baseAddress = dataPointer else { 
-        print("[H264Encoder] CMBlockBuffer error")
-        return 
-    }
-
-    var bufferOffset = 0
-    let headerLength = 4 // 4-Byte NALU-Längenpräfix
-
-    while bufferOffset + headerLength < totalLength {
-        var naluLength: UInt32 = 0
-        memcpy(&naluLength, baseAddress + bufferOffset, headerLength)
-        naluLength = CFSwapInt32BigToHost(naluLength)
-
-        let totalNALULength = Int(naluLength)
-        let startCode: [UInt8] = [0, 0, 0, 1]
-        nalData.append(startCode, count: 4)
-
-        // Pointer-Typ konvertieren (Int8 -> UInt8) für append(_:count:)
-        let naluPointer = UnsafeRawPointer(baseAddress + bufferOffset + headerLength)
-            .assumingMemoryBound(to: UInt8.self)
-        nalData.append(naluPointer, count: totalNALULength)
-
-        bufferOffset += headerLength + totalNALULength
+    
+    CMBlockBufferGetDataPointer(blockBuffer, atOffset: 0, lengthAtOffsetOut: nil, totalLengthOut: &totalLength, dataPointerOut: &dataPointer)
+    
+    if let baseAddress = dataPointer {
+        var offset = 0
+        while offset < totalLength {
+            var naluLength: UInt32 = 0
+            memcpy(&naluLength, baseAddress + offset, 4)
+            naluLength = CFSwapInt32BigToHost(naluLength)
+            
+            nalData.append(contentsOf: [0, 0, 0, 1]) // Start Code
+            let naluPtr = UnsafeRawPointer(baseAddress + offset + 4).assumingMemoryBound(to: UInt8.self)
+            nalData.append(naluPtr, count: Int(naluLength))
+            
+            offset += Int(naluLength) + 4
+        }
     }
 
     if !nalData.isEmpty {
-        print("[H264Encoder] Encoded frame: \(nalData.count) bytes, keyframe=\(isKeyframe)")
         encoder.onEncoded?(nalData, isKeyframe)
-    } else {
-        print("[H264Encoder] WARNING: Empty nalData after encoding")
     }
 }
-
