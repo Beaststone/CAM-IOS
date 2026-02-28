@@ -14,13 +14,19 @@ final class ControlChannelClient {
     private var tcpListener: NWListener?
     private let queue = DispatchQueue(label: "control.channel.client.queue")
 
-    private var isUSBMode = false
+    private var currentPort: UInt16?
 
     let configPublisher = PassthroughSubject<StreamConfig, Never>()
     let connectionStatePublisher = PassthroughSubject<ControlConnectionState, Never>()
 
     func connect(to host: String, port: UInt16, isUSB: Bool) {
+        if self.isUSBMode == isUSB && self.currentPort == port && (tcpListener != nil || tcpClientConnection != nil) {
+            print("[ControlChannelClient] Already connected/listening on \(port). Skipping restart.")
+            return
+        }
+
         self.isUSBMode = isUSB
+        self.currentPort = port
         disconnect()
         
         connectionStatePublisher.send(.searching)
@@ -53,11 +59,11 @@ final class ControlChannelClient {
     }
 
     private func startTCPServer(port: UInt16) {
+        if tcpListener != nil { return }
         do {
             let nwPort = NWEndpoint.Port(rawValue: port)!
             let params = NWParameters.tcp
             params.allowLocalEndpointReuse = true
-            params.requiredInterfaceType = .loopback
             
             tcpListener = try NWListener(using: params, on: nwPort)
             
@@ -71,7 +77,6 @@ final class ControlChannelClient {
             }
             
             tcpListener?.newConnectionHandler = { [weak self] newConnection in
-                print("[ControlChannelClient] USB Mux Client connected")
                 self?.handleNewTCPConnection(newConnection)
             }
             

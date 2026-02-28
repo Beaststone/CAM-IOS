@@ -8,17 +8,21 @@ final class VideoStreamClient {
     
     private let queue = DispatchQueue(label: "video.stream.client.queue")
 
-    private var isUSBMode = false
+    private var currentPort: UInt16?
 
     func connect(to host: String, port: UInt16, isUSB: Bool) {
+        if self.isUSBMode == isUSB && self.currentPort == port && (tcpListener != nil || udpConnection != nil) {
+            print("[VideoStreamClient] Already connected/listening on \(port). Skipping restart.")
+            return
+        }
+
         self.isUSBMode = isUSB
+        self.currentPort = port
         stop()
 
         if isUSB {
-            // USB Muxd Mode (TCP Server waiting for PC)
             startTCPServer(port: port)
         } else {
-            // WLAN Mode (UDP Client sending to PC)
             startUDPClient(host: host, port: port)
         }
     }
@@ -34,34 +38,30 @@ final class VideoStreamClient {
             print("[VideoStreamClient-UDP] State: \(state)")
         }
         udpConnection?.start(queue: queue)
-        print("[VideoStreamClient-UDP] Started")
     }
 
     private func startTCPServer(port: UInt16) {
+        if tcpListener != nil { return }
         do {
             let nwPort = NWEndpoint.Port(rawValue: port)!
-            
-            // TCP Parameter - optimiert für USBMuxd Loopback
-            // Native USB Tunnel verbinden sich immer via IPv4 auf 127.0.0.1
             let params = NWParameters.tcp
             params.allowLocalEndpointReuse = true
-            params.requiredInterfaceType = .loopback
+            // params.requiredInterfaceType = .loopback // Entfernt für maximale Kompatibilität falls usbmuxd anders routet
             
             tcpListener = try NWListener(using: params, on: nwPort)
             
             tcpListener?.stateUpdateHandler = { state in
-                print("[VideoStreamClient-TCPServer] State: \(state)")
+                print("[VideoStreamClient-TCPServer] Listener State: \(state)")
             }
             
             tcpListener?.newConnectionHandler = { [weak self] newConnection in
-                print("[VideoStreamClient-TCPServer] New connection from \(newConnection.endpoint)")
                 self?.handleNewTCPConnection(newConnection)
             }
             
             tcpListener?.start(queue: queue)
-            print("[VideoStreamClient-TCPServer] Listening on port \(port) for USBMuxd PC connection...")
+            print("[VideoStreamClient-TCPServer] Listening on port \(port)...")
         } catch {
-            print("[VideoStreamClient-TCPServer] Failed to create listener: \(error)")
+            print("[VideoStreamClient-TCPServer] Error: \(error)")
         }
     }
 

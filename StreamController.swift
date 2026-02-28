@@ -9,21 +9,22 @@ final class StreamController: ObservableObject {
     private let controlClient = ControlChannelClient()
     private var cancellables = Set<AnyCancellable>()
 
-    private var dimTimer: Timer?
+    private var lastReceivedConfig: StreamConfig?
     private weak var appState: AppState?
 
     init() {
         print("[StreamController] Init")
         setupPipelines()
         
-        // NEU: Beobachtet Drehungen des Handys und aktualisiert den Kamera-Output
+        // ORIENTATION FIX: Beobachtet Drehungen und triggert proaktiv eine Neukonfiguration
         NotificationCenter.default.addObserver(
             forName: UIDevice.orientationDidChangeNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            print("[StreamController] Orientation changed, updating camera output...")
-            self?.cameraManager.updateVideoOrientation()
+            guard let self = self, let lastConfig = self.lastReceivedConfig else { return }
+            print("[StreamController] Orientation changed, re-applying config...")
+            self.sendConfig(lastConfig)
         }
     }
 
@@ -45,25 +46,19 @@ final class StreamController: ObservableObject {
             print("[StreamController] Camera access granted, configuring...")
             self.cameraManager.reconfigure()
             
-            // NEU: Vor dem Start sicherstellen, dass die Orientierung korrekt ist
-            self.cameraManager.updateVideoOrientation()
-            
-            self.cameraManager.start()
-
             let mode = self.appState?.connectionMode ?? .wifi
             let pcIP = mode == .usb ? "172.20.10.2" : "192.168.2.229"
-            
-            print("[StreamController] Mode: \(mode). Connecting to PC at \(pcIP):5000 and \(pcIP):5960")
-            
             let isUSB = (mode == .usb)
+            
+            print("[StreamController] Mode: \(mode). Target: \(pcIP)")
+            
             self.encoder.isUSBMode = isUSB
 
-            // FIX: Vorherige Listener hart beenden bevor wir neu binden (verhindert Error 48 Address already in use)
-            self.videoClient.stop()
-            self.controlClient.disconnect()
-
+            // FIX: Nur stoppen wenn nötig, um Port-Konflikte zu vermeiden
             self.videoClient.connect(to: pcIP, port: 5000, isUSB: isUSB)
             self.controlClient.connect(to: pcIP, port: 5960, isUSB: isUSB)
+            
+            self.cameraManager.start()
         }
     }
 
@@ -77,32 +72,34 @@ final class StreamController: ObservableObject {
         controlClient.disconnect()
         UIApplication.shared.isIdleTimerDisabled = false
         cancelDimTimer()
+        lastReceivedConfig = nil 
         print("[StreamController] Stopped")
     }
 
     func sendConfig(_ config: StreamConfig) {
+        self.lastReceivedConfig = config
         var adjustedConfig = config
         
-        // ORIENTATION FIX: Wenn das Handy hochkant gehalten wird, müssen wir Breite und Höhe tauschen
+        // ORIENTATION FIX: Auflösung proaktiv an die aktuelle Gerätelage anpassen
         let scenes = UIApplication.shared.connectedScenes
         let windowScene = scenes.first as? UIWindowScene
         let orientation = windowScene?.interfaceOrientation ?? .portrait
         
-        if orientation.isPortrait && config.width > config.height {
+        let isPortrait = orientation.isPortrait
+        
+        if isPortrait && config.width > config.height {
             adjustedConfig.width = config.height
             adjustedConfig.height = config.width
-            print("[StreamController] Porträt-Modus erkannt: Tausche Auflösung zu \(adjustedConfig.width)x\(adjustedConfig.height)")
-        } else if orientation.isLandscape && config.width < config.height {
+            print("[StreamController] Swapping to Portrait: \(adjustedConfig.width)x\(adjustedConfig.height)")
+        } else if !isPortrait && config.width < config.height {
             adjustedConfig.width = config.height
             adjustedConfig.height = config.width
-            print("[StreamController] Querformat erkannt: Tausche Auflösung zu \(adjustedConfig.width)x\(adjustedConfig.height)")
+            print("[StreamController] Swapping to Landscape: \(adjustedConfig.width)x\(adjustedConfig.height)")
         }
 
         controlClient.sendConfig(adjustedConfig)
         cameraManager.apply(config: adjustedConfig)
         encoder.update(config: adjustedConfig)
-        
-        // Auch bei neuen Konfigurationen die Orientierung prüfen
         cameraManager.updateVideoOrientation()
         
         resetDimTimer()
