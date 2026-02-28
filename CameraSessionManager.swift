@@ -159,18 +159,19 @@ final class CameraSessionManager: NSObject {
     }
 
     private func bestFormat(for device: AVCaptureDevice, config: StreamConfig) -> AVCaptureDevice.Format? {
-        let targetWidth = Int32(config.width)
-        let targetHeight = Int32(config.height)
+        let reqMin = min(config.width, config.height)
+        let reqMax = max(config.width, config.height)
         let targetFPS = Float64(config.fps)
 
-        // 1. Filter nach Auflösung
+        // 1. Filter nach Auflösung (Orientierung-unabhängig)
         let matchingDimensions = device.formats.filter { format in
             let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-            return dims.width == targetWidth && dims.height == targetHeight
+            let fMin = min(dims.width, dims.height)
+            let fMax = max(dims.width, dims.height)
+            return fMin == reqMin && fMax == reqMax
         }
 
         // 2. Suche nach dem Format, das die höchste FPS unterstützt (Sicherheitsmarge)
-        // Wir sortieren nach der maximalen Framerate, die das Format bietet
         let sortedByFPS = matchingDimensions.sorted { f1, f2 in
             let max1 = f1.videoSupportedFrameRateRanges.map { $0.maxFrameRate }.max() ?? 0
             let max2 = f2.videoSupportedFrameRateRanges.map { $0.maxFrameRate }.max() ?? 0
