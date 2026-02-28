@@ -97,18 +97,21 @@ final class CameraSessionManager: NSObject {
                 let maxSupportedFPS = format.videoSupportedFrameRateRanges.map { $0.maxFrameRate }.max() ?? targetFPS
                 let actualFPS = min(targetFPS, maxSupportedFPS)
                 
-                // 60 FPS LOCK (Phase 5): Wir erzwingen exakte Framerate-Dauern
-                let duration = CMTime(value: 1, timescale: CMTimeScale(actualFPS))
+                // HARDCORE 60 FPS LOCK (Phase 5.2): Wir erzwingen 1/60s
+                let duration = CMTime(value: 1, timescale: 60)
                 device.activeVideoMinFrameDuration = duration
                 device.activeVideoMaxFrameDuration = duration
                 
-                // EXPOSURE LOCK: Verhindert, dass das iPhone bei Dunkelheit auf 30 FPS drosselt
+                // EXPOSURE & SHUTTER SPEED LOCK: Verhindert 39-FPS-Limit bei Dunkelheit
                 if actualFPS >= 60 {
-                    if device.isExposureModeSupported(.continuousAutoExposure) {
+                    if device.isExposureModeSupported(.custom) {
+                        // Wir erzwingen eine Verschlusszeit von max 1/60s, damit 60 FPS physikalisch möglich sind
+                        // ISO lassen wir auf dem aktuellen Wert oder Auto, falls unterstützt
+                        let currentISO = device.iso
+                        device.setExposureModeCustom(duration: duration, iso: currentISO, completionHandler: nil)
+                    } else if device.isExposureModeSupported(.continuousAutoExposure) {
                         device.exposureMode = .continuousAutoExposure
                     }
-                    // Wir setzen die Target-Framerate als Priorität für das Belichtungssystem
-                    // (Falls verfügbar in der API, ansonsten reicht der Duration-Lock meist aus)
                 }
 
                 device.unlockForConfiguration()
