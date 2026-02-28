@@ -21,6 +21,9 @@ final class H264Encoder {
     /// Wird bei jedem encodierten Frame aufgerufen.
     var onEncoded: ((Data, Bool) -> Void)?
 
+    // Cache für Parameter Sets (SPS, PPS, VPS) um sie jedem Frame voranzustellen (Annex-B)
+    private var cachedParameterSets: Data = Data()
+
     init() {
         print("[H264Encoder] Init")
         setupSession()
@@ -111,7 +114,11 @@ final class H264Encoder {
         if isUSBMode {
             baseBitRate = config.width >= 3840 ? 40_000_000 : (config.width >= 2560 ? 28_000_000 : 18_000_000)
         } else {
-            baseBitRate = config.width >= 3840 ? 20_000_000 : (config.width >= 2560 ? 12_000_000 : 8_000_000)
+            // WLAN: Wir kappen die Bitrate hart bei einem "UDP-Sicherheits-Bitrate"
+            // Ein UDP Paket darf max 65KB haben. Wir zielen auf 50KB pro Frame im Schnitt ab.
+            let safetyMaxBitrate = Int(Double(config.fps) * 50_000 * 8) // 50KB pro Frame * FPS * 8 bits
+            let requestedBitrate = config.width >= 3840 ? 20_000_000 : (config.width >= 2560 ? 12_000_000 : 8_000_000)
+            baseBitRate = min(requestedBitrate, safetyMaxBitrate)
         }
         
         // FPS-Skalierung für WLAN: Verhindert, dass 30/15fps durch zu große Einzel-Frames das WLAN verstopfen
@@ -127,6 +134,7 @@ final class H264Encoder {
         let prepareStatus = VTCompressionSessionPrepareToEncodeFrames(session)
         if prepareStatus == noErr {
             print("[H264Encoder] \(useHEVC ? "HEVC" : "H.264") Session ready: \(width)x\(height) @ \(config.fps)fps (\(bitRate/1000000) Mbps)")
+            cachedParameterSets = Data() // Cache leeren bei neuem Session-Setup
         } else {
             print("[H264Encoder] Prepare failed: \(prepareStatus)")
             compressionSession = nil // Zurücksetzen wenn Prepare fehlschlägt
@@ -202,6 +210,7 @@ private func compressionOutputCallback(outputCallbackRefCon: UnsafeMutableRawPoi
         }
         
         if status == noErr {
+            var combinedHeaders = Data()
             for i in 0..<parameterSetCount {
                 var ptr: UnsafePointer<UInt8>?
                 var size = 0
@@ -212,11 +221,18 @@ private func compressionOutputCallback(outputCallbackRefCon: UnsafeMutableRawPoi
                 }
                 
                 if let p = ptr {
-                    nalData.append(contentsOf: [0, 0, 0, 1])
-                    nalData.append(p, count: size)
+                    combinedHeaders.append(contentsOf: [0, 0, 0, 1])
+                    combinedHeaders.append(p, count: size)
                 }
             }
+            encoder.cachedParameterSets = combinedHeaders
         }
+    }
+
+    // Wir stellen die Parameter-Sets JEDEM Frame voran!
+    // Sorgt für Sofort-Recovery bei Paketverlust (kein graues Bild mehr).
+    if !encoder.cachedParameterSets.isEmpty {
+        nalData.append(encoder.cachedParameterSets)
     }
 
     guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { return }
