@@ -60,7 +60,6 @@ final class CameraSessionManager: NSObject {
         session.beginConfiguration()
         
         // --- AUFLÖSUNGS-PRESETS INKL. 4K & 2K ---
-        // PHASE 12: Wir priorisieren FPS vor Automatik (Jetzt sicher durch Atomic Reset)
         if session.canSetSessionPreset(.inputPriority) {
             session.sessionPreset = .inputPriority
         } else {
@@ -74,40 +73,28 @@ final class CameraSessionManager: NSObject {
             do {
                 try device.lockForConfiguration()
                 
-                // Setzt das exakte Format (wichtig für 2K/4K/60FPS)
                 device.activeFormat = format
                 
-                // Defensive FPS-Capping: Nie mehr fordern als das Format kann (verhindert Crashes)
                 let targetFPS = Float64(config.fps)
                 let maxSupportedFPS = format.videoSupportedFrameRateRanges.map { $0.maxFrameRate }.max() ?? targetFPS
                 let actualFPS = min(targetFPS, maxSupportedFPS)
-                
-                // PHASE 7.1: DYNAMISCHER FPS LOCK (SIGABRT FIX)
-                // Wir fordern die Dauer basierend auf den tatsächlich ermittelten actualFPS.
                 let targetDuration = CMTime(value: 1, timescale: Int32(actualFPS))
                 
-                // Wir validieren die Dauer gegen die Hardware-Ranges des aktuellen Formats
-                if let range = format.videoSupportedFrameRateRanges.first(where: { $0.maxFrameRate >= actualFPS && $0.minFrameRate <= actualFPS }) {
-                    let minDuration = range.minFrameDuration
-                    let maxDuration = range.maxFrameDuration
-                    let safeDuration = CMTimeClampToRange(targetDuration, range: CMTimeRange(start: minDuration, end: maxDuration))
-                    
                 // PHASE 16: Hard-Lock auf 60 FPS (Auto-FPS komplett deaktivieren)
-                // Verhindert, dass das iPhone bei wenig Licht auf 24/30 FPS drosselt.
                 if device.isSmoothAutoFocusSupported { device.isSmoothAutoFocusEnabled = false }
                 
                 device.activeVideoMinFrameDuration = targetDuration
                 device.activeVideoMaxFrameDuration = targetDuration
                 
-                // Wir setzen die Belichtung auf Continuous, aber fixieren die Rate
                 if device.isExposureModeSupported(.continuousAutoExposure) {
                     device.exposureMode = .continuousAutoExposure
                 }
                 
                 device.unlockForConfiguration()
-                print("[CameraSessionManager] Applied: \(config.width)x\(config.height) @ \(actualFPS) FPS (Target: \(config.fps))")
+                print("[CameraSessionManager] Applied: \(config.width)x\(config.height) @ \(actualFPS) FPS")
             } catch {
                 print("[CameraSessionManager] Configuration Error: \(error)")
+                device.unlockForConfiguration()
             }
         }
     }
