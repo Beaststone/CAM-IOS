@@ -58,6 +58,10 @@ final class StreamController: ObservableObject {
             let isUSB = (mode == .usb)
             self.encoder.isUSBMode = isUSB
 
+            // FIX: Vorherige Listener hart beenden bevor wir neu binden (verhindert Error 48 Address already in use)
+            self.videoClient.stop()
+            self.controlClient.disconnect()
+
             self.videoClient.connect(to: pcIP, port: 5000, isUSB: isUSB)
             self.controlClient.connect(to: pcIP, port: 5960, isUSB: isUSB)
         }
