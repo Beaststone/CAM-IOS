@@ -10,6 +10,7 @@ final class StreamController: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     private var lastReceivedConfig: StreamConfig?
+    private var dimTimer: Timer?
     private weak var appState: AppState?
 
     init() {

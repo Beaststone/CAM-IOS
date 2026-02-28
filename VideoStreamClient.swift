@@ -8,6 +8,7 @@ final class VideoStreamClient {
     
     private let queue = DispatchQueue(label: "video.stream.client.queue")
 
+    private var isUSBMode = false
     private var currentPort: UInt16?
 
     func connect(to host: String, port: UInt16, isUSB: Bool) {
@@ -100,7 +101,7 @@ final class VideoStreamClient {
     /// Sendet einen Annex-B H.264-Frame.
     /// UDP für WLAN, TCP für natives USB-Kabel.
     func send(frameData: Data) {
-        if isUSBMode {
+        if self.isUSBMode {
             guard let conn = tcpClientConnection else { return }
             
             // Bei TCP müssen wir dem Decoder auf Windows-Seite sagen, wie groß ein Frame ist.

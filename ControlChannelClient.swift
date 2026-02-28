@@ -14,6 +14,7 @@ final class ControlChannelClient {
     private var tcpListener: NWListener?
     private let queue = DispatchQueue(label: "control.channel.client.queue")
 
+    private var isUSBMode = false
     private var currentPort: UInt16?
 
     let configPublisher = PassthroughSubject<StreamConfig, Never>()

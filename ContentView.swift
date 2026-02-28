@@ -33,6 +33,8 @@ struct CameraPreviewRepresentable: UIViewRepresentable {
                     connection.videoOrientation = .landscapeRight
                 case .portraitUpsideDown:
                     connection.videoOrientation = .portraitUpsideDown
+                case .unknown:
+                    connection.videoOrientation = .portrait
                 @unknown default:
                     connection.videoOrientation = .portrait
                 }
@@ -73,6 +75,7 @@ extension UIInterfaceOrientation {
         case .landscapeRight: return .landscapeRight
         case .landscapeLeft: return .landscapeLeft
         case .portraitUpsideDown: return .portraitUpsideDown
+        case .unknown: return .portrait
         @unknown default: return .portrait
         }
     }

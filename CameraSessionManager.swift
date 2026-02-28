@@ -149,6 +149,7 @@ final class CameraSessionManager: NSObject {
             case .landscapeLeft: connection.videoOrientation = .landscapeLeft
             case .landscapeRight: connection.videoOrientation = .landscapeRight
             case .portraitUpsideDown: connection.videoOrientation = .portraitUpsideDown
+            case .unknown: connection.videoOrientation = .portrait
             @unknown default: connection.videoOrientation = .portrait
             }
         }
