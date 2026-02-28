@@ -55,13 +55,21 @@ final class H264Encoder {
 
         let width = Int32(config.width)
         let height = Int32(config.height)
+        let useHEVC = config.useHEVC ?? true
+
+        // SPEZIFIKATION FÜR ULTRA-LOW LATENCY RATE CONTROL
+        let encoderSpec: [CFString: Any] = [
+            kVTVideoEncoderSpecification_EnableLowLatencyRateControl: true
+        ]
 
         var session: VTCompressionSession?
+        let codec = useHEVC ? kCMVideoCodecType_HEVC : kCMVideoCodecType_H264
+        
         let status = VTCompressionSessionCreate(allocator: kCFAllocatorDefault,
                                                width: width,
                                                height: height,
-                                               codecType: kCMVideoCodecType_H264,
-                                               encoderSpecification: nil,
+                                               codecType: codec,
+                                               encoderSpecification: encoderSpec as CFDictionary,
                                                imageBufferAttributes: nil,
                                                compressedDataAllocator: nil,
                                                outputCallback: compressionOutputCallback,
@@ -69,70 +77,61 @@ final class H264Encoder {
                                                compressionSessionOut: &session)
 
         guard status == noErr, let session = session else {
-            print("[H264Encoder] Failed to create session: \(status)")
+            print("[H264Encoder] Failed to create session: \(status). Falling back...")
+            if useHEVC { 
+                var newConfig = config
+                newConfig.useHEVC = false
+                self.config = newConfig
+                setupH264Session() 
+            }
             return
         }
 
         compressionSession = session
 
-        // --- IRIUN-LEVEL TUNING FÜR 4K/2K STABILITÄT ---
-        
-        // 1. Echtzeit-Modus: Minimiert Verzögerung
+        // --- PROFESSINAL TUNING FÜR WLAN & 4K ---
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_RealTime, value: kCFBooleanTrue)
-        
-        // 2. Erwartete Framerate setzen
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxFrameDelayCount, value: 0 as CFNumber)
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: NSNumber(value: config.fps))
         
-        // 3. Low Latency: Keine B-Frames
+        // Rolling Intra Refresh (Essentiell für WLAN/UDP Stabilität)
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: 0 as CFNumber) 
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ReferenceRefreshPass, value: kCFBooleanTrue)
+        
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AllowFrameReordering, value: kCFBooleanFalse)
         
-        // 4. High Profile & Level 5.2 für 4K/60fps Support
-        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ProfileLevel, value: kVTProfileLevel_H264_High_AutoLevel)
-        
-        // NEU: Sofortige Ausgabe (Keine Verzögerung im Encoder-Buffer)
-        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxFrameDelayCount, value: 0 as CFNumber)
-
-        // 5. Dynamische Bitratenkontrolle anhand des Netzwerks (USB vs WLAN)
-        let bitRate: Int
-        if isUSBMode {
-            // Kabelgebunden: Viel Bandbreite möglich
-            if config.width >= 3840 { 
-                bitRate = 35_000_000 // 4K60 Stabilität
-            } else if config.width >= 2560 { 
-                bitRate = 25_000_000 
-            } else { 
-                bitRate = 15_000_000 
-            }
+        if useHEVC {
+            VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ProfileLevel, value: kVTProfileLevel_HEVC_Main_AutoLevel)
         } else {
-            // WLAN: Erhöhte Bitraten für "perfekte" Qualität ohne Matsch
-            if config.width >= 3840 { 
-                bitRate = 25_000_000 // Von 12 auf 25 erhöht für 4K WLAN
-            } else if config.width >= 2560 { 
-                bitRate = 18_000_000 // Von 8 auf 18 erhöht für 2K WLAN
-            } else { 
-                bitRate = 12_000_000 // Von 5 auf 12 erhöht für 1080p WLAN
-            }
+            VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ProfileLevel, value: kVTProfileLevel_H264_High_AutoLevel)
         }
         
+        // Bitrate-Management
+        let bitRate: Int
+        if isUSBMode {
+            bitRate = config.width >= 3840 ? 40_000_000 : (config.width >= 2560 ? 28_000_000 : 18_000_000)
+        } else {
+            // WLAN: HEVC ist effizienter, wir können die Bitrate moderat halten für Stabilität
+            bitRate = config.width >= 3840 ? 25_000_000 : (config.width >= 2560 ? 15_000_000 : 10_000_000)
+        }
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: bitRate as CFNumber)
 
-        // 6. Daten-Limit (WICHTIG gegen Spikes & Matsch)
-        // Wir erlauben dem Encoder, kurzzeitig mehr zu nehmen (1.5x) um Qualität in hektischen Szenen zu halten
-        let byteLimit = (bitRate * 15 / 10) / 8 // 1.5x Bitrate in Bytes
+        let byteLimit = (bitRate * 12 / 10) / 8 // 1.2x Puffer gegen Spikes
         let limit = [byteLimit, 1] as CFArray
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_DataRateLimits, value: limit)
 
-        // 7. GOP-Size (Keyframe-Intervall: Alle 1 Sekunde für schnellere Erholung bei Fehlern)
-        let keyFrameInterval = config.fps
-        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: NSNumber(value: keyFrameInterval))
-
         let prepareStatus = VTCompressionSessionPrepareToEncodeFrames(session)
         if prepareStatus == noErr {
-            print("[H264Encoder] Session ready: \(width)x\(height) @ \(config.fps)fps (\(bitRate/1000000) Mbps)")
+            print("[H264Encoder] \(useHEVC ? "HEVC" : "H.264") Session ready: \(width)x\(height) @ \(config.fps)fps (\(bitRate/1000000) Mbps)")
         } else {
             print("[H264Encoder] Prepare failed: \(prepareStatus)")
             compressionSession = nil // Zurücksetzen wenn Prepare fehlschlägt
         }
+    }
+
+    private func setupH264Session() {
+        // Diese Methode wird nur als letzter Fallback gerufen
+        setupSession() 
     }
 
     func encode(sampleBuffer: CMSampleBuffer) {
@@ -188,15 +187,30 @@ private func compressionOutputCallback(outputCallbackRefCon: UnsafeMutableRawPoi
 
     if isKeyframe {
         var parameterSetCount = 0
-        CMVideoFormatDescriptionGetH264ParameterSetAtIndex(formatDesc, parameterSetIndex: 0, parameterSetPointerOut: nil, parameterSetSizeOut: nil, parameterSetCountOut: &parameterSetCount, nalUnitHeaderLengthOut: nil)
+        var status: OSStatus
         
-        for i in 0..<parameterSetCount {
-            var ptr: UnsafePointer<UInt8>?
-            var size = 0
-            CMVideoFormatDescriptionGetH264ParameterSetAtIndex(formatDesc, parameterSetIndex: i, parameterSetPointerOut: &ptr, parameterSetSizeOut: &size, parameterSetCountOut: nil, nalUnitHeaderLengthOut: nil)
-            if let p = ptr {
-                nalData.append(contentsOf: [0, 0, 0, 1])
-                nalData.append(p, count: size)
+        // HEVC (H.265) hat 3 Parameter-Sets: VPS, SPS, PPS
+        // H.264 hat 2 Parameter-Sets: SPS, PPS
+        if encoder.config.useHEVC {
+            status = CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(formatDesc, parameterSetIndex: 0, parameterSetPointerOut: nil, parameterSetSizeOut: nil, parameterSetCountOut: &parameterSetCount, nalUnitHeaderLengthOut: nil)
+        } else {
+            status = CMVideoFormatDescriptionGetH264ParameterSetAtIndex(formatDesc, parameterSetIndex: 0, parameterSetPointerOut: nil, parameterSetSizeOut: nil, parameterSetCountOut: &parameterSetCount, nalUnitHeaderLengthOut: nil)
+        }
+        
+        if status == noErr {
+            for i in 0..<parameterSetCount {
+                var ptr: UnsafePointer<UInt8>?
+                var size = 0
+                if encoder.config.useHEVC {
+                    CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(formatDesc, parameterSetIndex: i, parameterSetPointerOut: &ptr, parameterSetSizeOut: &size, parameterSetCountOut: nil, nalUnitHeaderLengthOut: nil)
+                } else {
+                    CMVideoFormatDescriptionGetH264ParameterSetAtIndex(formatDesc, parameterSetIndex: i, parameterSetPointerOut: &ptr, parameterSetSizeOut: &size, parameterSetCountOut: nil, nalUnitHeaderLengthOut: nil)
+                }
+                
+                if let p = ptr {
+                    nalData.append(contentsOf: [0, 0, 0, 1])
+                    nalData.append(p, count: size)
+                }
             }
         }
     }

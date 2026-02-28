@@ -143,7 +143,8 @@ final class ControlChannelClient {
            let width = json["width"] as? Int,
            let height = json["height"] as? Int,
            let fps = json["fps"] as? Int {
-            let cfg = StreamConfig(width: width, height: height, fps: fps)
+            let useHEVC = json["useHEVC"] as? Bool
+            let cfg = StreamConfig(width: width, height: height, fps: fps, useHEVC: useHEVC)
             configPublisher.send(cfg)
         }
     }
