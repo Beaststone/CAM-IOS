@@ -111,10 +111,10 @@ final class H264Encoder {
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxFrameDelayCount, value: 0 as CFNumber)
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: NSNumber(value: config.fps))
         
-        // 2. IDR Frames alle 1 Sekunde für garantierte Erholung (WebRTC-Style)
-        // Wir fixieren das auf 30 Frames (ca. 1s bei 30fps), um konstante Heilung zu garantieren.
-        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: 30 as CFNumber) 
-        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, value: 1.0 as CFNumber)
+        // 2. IDR Frames alle 0.25 - 0.5 Sekunde für garantierte Erholung (Phase 5.1)
+        // Wir fixieren das auf 15 Frames, um der RTX 2060 schnellere Sync-Punkte zu bieten.
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: 15 as CFNumber) 
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, value: 0.25 as CFNumber)
         
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AllowFrameReordering, value: kCFBooleanFalse)
         
