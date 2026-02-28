@@ -65,10 +65,12 @@ final class ControlChannelClient {
         if tcpListener != nil { return }
         do {
             let nwPort = NWEndpoint.Port(rawValue: port)!
+            // Wir zwingen den Listener auf IPv4 und Loopback für usbmuxd Stabilität
             let params = NWParameters.tcp
             params.allowLocalEndpointReuse = true
             
             tcpListener = try NWListener(using: params, on: nwPort)
+            print("[ControlChannelClient] USB Listener starting on port \(port)...")
             
             tcpListener?.stateUpdateHandler = { [weak self] state in
                 switch state {

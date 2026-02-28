@@ -129,7 +129,8 @@ final class H264Encoder {
         if let preferredBitrate = config.bitrate {
             bitRate = preferredBitrate
         } else if isUSBMode {
-            bitRate = config.width >= 3840 ? 40_000_000 : (config.width >= 2560 ? 28_000_000 : 18_000_000)
+            // USB-Optimiert: 15 Mbps für 4K (Ideal für PC Decoder Last)
+            bitRate = config.width >= 3840 ? 15_000_000 : (config.width >= 2560 ? 10_000_000 : 8_000_000)
         } else {
             // WLAN-Optimiert: 4K auf 12Mbps drosseln um Stau (graue Bilder) zu vermeiden.
             bitRate = config.width >= 3840 ? 12_000_000 : (config.width >= 2560 ? 9_000_000 : 5_000_000)
