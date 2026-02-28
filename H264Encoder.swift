@@ -95,13 +95,13 @@ final class H264Encoder {
         // 5. Dynamische Bitratenkontrolle anhand des Netzwerks (USB vs WLAN)
         let bitRate: Int
         if isUSBMode {
-            // Kabelgebunden: Hohe Bitrate für 60fps
+            // Kabelgebunden: Moderate Bitrate für 2K um OOM zu verhindern
             if config.width >= 3840 { 
-                bitRate = 60_000_000 // 60 Mbps für 4K60 (Enorme Qualität)
+                bitRate = 45_000_000 // Von 60 auf 45 reduziert für Stabilität
             } else if config.width >= 2560 { 
-                bitRate = 35_000_000 // 35 Mbps für 2K
+                bitRate = 25_000_000 // Von 35 auf 25 reduziert
             } else { 
-                bitRate = 20_000_000 // 20 Mbps für 1080p
+                bitRate = 15_000_000 
             }
         } else {
             // WLAN: UDP verzeiht keinen Jitter
@@ -116,12 +116,12 @@ final class H264Encoder {
         
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: bitRate as CFNumber)
 
-        // 6. Daten-Limit
+        // 6. Daten-Limit (WICHTIG gegen Spikes)
         let limit = [bitRate / 8, 1] as CFArray
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_DataRateLimits, value: limit)
 
-        // 7. GOP-Size (Keyframe-Intervall: Alle 2 Sek für Stabilität)
-        let keyFrameInterval = config.fps * 2
+        // 7. GOP-Size (Keyframe-Intervall: Alle 1 Sekunde für schnellere Erholung bei Fehlern)
+        let keyFrameInterval = config.fps
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: NSNumber(value: keyFrameInterval))
 
         let prepareStatus = VTCompressionSessionPrepareToEncodeFrames(session)
@@ -129,6 +129,7 @@ final class H264Encoder {
             print("[H264Encoder] Session ready: \(width)x\(height) @ \(config.fps)fps (\(bitRate/1000000) Mbps)")
         } else {
             print("[H264Encoder] Prepare failed: \(prepareStatus)")
+            compressionSession = nil // Zurücksetzen wenn Prepare fehlschlägt
         }
     }
 

@@ -186,7 +186,22 @@ final class CameraSessionManager: NSObject {
             }
         }
 
-        return bestMatch ?? sortedByFPS.first ?? device.formats.last
+        if let match = bestMatch ?? sortedByFPS.first {
+            return match
+        }
+
+        // --- SPEZIALFALL 2K/4K FALLBACK ---
+        // Wenn kein exaktes Match (2K), nimm das nächsthöhere verfügbare Format (4K)
+        let highResFormats = device.formats.filter { format in
+            let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+            return dims.width >= Int32(config.width) && dims.height >= Int32(config.height)
+        }.sorted { f1, f2 in
+            let w1 = CMVideoFormatDescriptionGetDimensions(f1.formatDescription).width
+            let w2 = CMVideoFormatDescriptionGetDimensions(f2.formatDescription).width
+            return w1 < w2 // Nimm das kleinste, das >= config ist
+        }
+
+        return highResFormats.first ?? device.formats.last
     }
 }
 

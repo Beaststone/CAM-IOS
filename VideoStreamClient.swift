@@ -98,28 +98,45 @@ final class VideoStreamClient {
         }
     }
 
+    private var pendingSends = 0
+    private let maxPendingSends = 10 // Max 10 Frames in der Queue bevor wir droppen
+
     /// Sendet einen Annex-B H.264-Frame.
     /// UDP für WLAN, TCP für natives USB-Kabel.
     func send(frameData: Data) {
+        // Backpressure Check: Wenn Netzwerk zu langsam, Frames verwerfen (Low Latency)
+        guard pendingSends < maxPendingSends else {
+            return
+        }
+
         if self.isUSBMode {
             guard let conn = tcpClientConnection else { return }
             
-            // Bei TCP müssen wir dem Decoder auf Windows-Seite sagen, wie groß ein Frame ist.
-            // Framing: 4-Byte Length Header + H.264 Payload (Typisch für TCP Video Streams)
+            // Framing: 4-Byte Length Header (Little Endian)
             var length = UInt32(frameData.count).littleEndian
-            var payload = Data(bytes: &length, count: 4)
+            
+            // Wir bauen das Paket effizient zusammen
+            var payload = Data(capacity: 4 + frameData.count)
+            withUnsafeBytes(of: length) { payload.append(contentsOf: $0) }
             payload.append(frameData)
             
-            conn.send(content: payload, completion: .contentProcessed { error in
-                if let error = error {
-                    print("[VideoStreamClient-TCPServer] Send error: \(error)")
+            pendingSends += 1
+            conn.send(content: payload, completion: .contentProcessed { [weak self] error in
+                self?.queue.async {
+                    self?.pendingSends -= 1
+                    if let error = error {
+                        print("[VideoStreamClient-TCP] Send error: \(error)")
+                    }
                 }
             })
         } else {
             // WLAN UDP
             guard let conn = udpConnection else { return }
-            conn.send(content: frameData, completion: .contentProcessed { error in
-                // Mute errors on high spam UDP
+            pendingSends += 1
+            conn.send(content: frameData, completion: .contentProcessed { [weak self] error in
+                self?.queue.async {
+                    self?.pendingSends -= 1
+                }
             })
         }
     }
