@@ -94,9 +94,9 @@ final class H264Encoder {
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxFrameDelayCount, value: 0 as CFNumber)
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: NSNumber(value: config.fps))
         
-        // Rolling Intra Refresh (Essentiell für WLAN/UDP Stabilität)
-        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: 0 as CFNumber) 
-        VTSessionSetProperty(session, key: "ReferenceRefreshPass" as CFString, value: kCFBooleanTrue)
+        // 2. IDR Frames alle 2 Sekunden für Stabilität (WLAN-Recovery)
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: NSNumber(value: config.fps * 2)) 
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, value: 2.0 as CFNumber)
         
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AllowFrameReordering, value: kCFBooleanFalse)
         
@@ -107,13 +107,17 @@ final class H264Encoder {
         }
         
         // Bitrate-Management
-        let bitRate: Int
+        let baseBitRate: Int
         if isUSBMode {
-            bitRate = config.width >= 3840 ? 40_000_000 : (config.width >= 2560 ? 28_000_000 : 18_000_000)
+            baseBitRate = config.width >= 3840 ? 40_000_000 : (config.width >= 2560 ? 28_000_000 : 18_000_000)
         } else {
-            // WLAN: HEVC ist effizienter, wir können die Bitrate moderat halten für Stabilität
-            bitRate = config.width >= 3840 ? 25_000_000 : (config.width >= 2560 ? 15_000_000 : 10_000_000)
+            baseBitRate = config.width >= 3840 ? 20_000_000 : (config.width >= 2560 ? 12_000_000 : 8_000_000)
         }
+        
+        // FPS-Skalierung für WLAN: Verhindert, dass 30/15fps durch zu große Einzel-Frames das WLAN verstopfen
+        let fpsFactor = Double(config.fps) / 60.0
+        let bitRate = isUSBMode ? baseBitRate : Int(Double(baseBitRate) * max(0.5, fpsFactor))
+        
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: bitRate as CFNumber)
 
         let byteLimit = (bitRate * 12 / 10) / 8 // 1.2x Puffer gegen Spikes
